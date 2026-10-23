@@ -1,0 +1,14 @@
+# Kivo code inside Firefox. tools/sync.ps1 copies apps/firefox/kivo to browser/components/kivo,
+# and a patch adds "kivo" to DIRS in browser/components/moz.build.
+# Build files stay ASCII: the build's Python may read them with the Windows code page.
+
+JAR_MANIFESTS += ["jar.mn"]
+
+MOZ_SRC_FILES += [
+    "KivoData.sys.mjs",
+    "KivoProfileMenu.sys.mjs",
+    "KivoProfiles.sys.mjs",
+    "KivoShell.sys.mjs",
+    "KivoTheme.sys.mjs",
+    "KivoWorkspaces.sys.mjs",
+]

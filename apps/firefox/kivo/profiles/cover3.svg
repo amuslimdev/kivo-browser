@@ -1,0 +1,9 @@
+<!-- Kivo profile card cover (confetti): context-fill is the profile color, context-stroke the color on it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 544">
+<defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient></defs>
+<rect width="800" height="544" fill="context-fill"/>
+<g fill="#fff" fill-opacity=".38"><rect x="60" y="60" width="44" height="18" rx="9" transform="rotate(-24 82 69)"/><rect x="690" y="420" width="50" height="20" rx="10" transform="rotate(30 715 430)"/><rect x="120" y="430" width="40" height="16" rx="8" transform="rotate(18 140 438)"/><rect x="640" y="70" width="46" height="18" rx="9" transform="rotate(-38 663 79)"/><rect x="250" y="40" width="36" height="14" rx="7" transform="rotate(40 268 47)"/></g>
+<g fill="context-stroke" fill-opacity=".34"><rect x="560" y="480" width="40" height="16" rx="8" transform="rotate(-20 580 488)"/><rect x="40" y="250" width="40" height="16" rx="8" transform="rotate(60 60 258)"/><rect x="740" y="230" width="36" height="14" rx="7" transform="rotate(-50 758 237)"/><circle cx="520" cy="60" r="12"/><circle cx="260" cy="500" r="13"/></g>
+<g fill="#fff" fill-opacity=".3"><circle cx="190" cy="150" r="10"/><circle cx="620" cy="370" r="11"/><circle cx="740" cy="30" r="9"/><circle cx="30" cy="520" r="10"/></g>
+<rect width="800" height="544" fill="url(#shade)"/>
+</svg>

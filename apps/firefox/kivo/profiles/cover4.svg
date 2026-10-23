@@ -1,0 +1,11 @@
+<!-- Kivo profile card cover (hills): context-fill is the profile color, context-stroke the color on it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 544">
+<defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient></defs>
+<rect width="800" height="544" fill="context-fill"/>
+<circle cx="660" cy="120" r="70" fill="#fff" opacity=".28"/>
+<circle cx="660" cy="120" r="104" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="14"/>
+<path d="M0 420c120-90 260-90 380 0s240 70 420-10V544H0z" fill="#fff" opacity=".14"/>
+<path d="M0 480c160-70 300-60 440 10s260 40 360-20V544H0z" fill="#fff" opacity=".2"/>
+<path d="M90 120c40-34 80-34 120 0" fill="none" stroke="context-stroke" stroke-opacity=".3" stroke-width="10" stroke-linecap="round"/>
+<rect width="800" height="544" fill="url(#shade)"/>
+</svg>

@@ -1,0 +1,46 @@
+/*
+ * صفحات Firefox جوه Kivo (G5): الإعدادات، والـ sidebars بتاعة الـ History والـ bookmarks. بخط Kivo ولون الـ profile
+ * (أو الـ workspace) واستدارته. KivoTheme.sys.mjs بيحمّل الملف ده ويحط --kivo-* على الصفحة.
+ * الـ tokens بتاعة Firefox جوه @layer، فأي حاجة هنا من غير layer بتكسبها.
+ */
+@import url("chrome://browser/content/kivo/fonts.css");
+
+:root {
+  --color-accent-primary: var(--kivo-accent);
+  --color-accent-primary-hover: color-mix(in srgb, var(--kivo-accent) 88%, black);
+  --color-accent-primary-active: color-mix(in srgb, var(--kivo-accent) 78%, black);
+  --button-text-color-primary: var(--kivo-on-accent);
+  --button-text-color-primary-hover: var(--kivo-on-accent);
+  --button-text-color-primary-active: var(--kivo-on-accent);
+  /* الـ hover في القوايم الجانبية (زي قايمة الإعدادات) وأزرار الأيقونات: لون الـ profile الخفيف بدل بنفسجي Firefox. */
+  --button-background-color-ghost-hover: color-mix(in srgb, var(--kivo-accent) 14%, transparent);
+  --button-background-color-ghost-active: color-mix(in srgb, var(--kivo-accent) 22%, transparent);
+  --focus-outline-color: var(--kivo-accent);
+  --border-radius-small: max(4px, calc(var(--kivo-radius) - 4px));
+  --border-radius-medium: var(--kivo-radius);
+  --border-radius-large: calc(var(--kivo-radius) + 6px);
+}
+
+/*
+ * قايمة الإعدادات (moz-page-nav): الـ tokens بتاعتها متعرّفة على الـ component نفسه (:host)، فـ :root مابيوصلهاش.
+ * القاعدة على العنصر نفسه من الصفحة بتغلب :host.
+ */
+moz-page-nav-button {
+  --page-nav-button-background-color-hover: color-mix(in srgb, var(--kivo-accent) 14%, transparent);
+  --page-nav-button-background-color-active: color-mix(in srgb, var(--kivo-accent) 22%, transparent);
+}
+
+/* الصفحات دي بتورّث الخط من الـ root، حتى جوه الـ components بتاعة Firefox. */
+:root,
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--kivo-font) !important;
+}
+
+/* "Your browser is being managed by your organization": ده من policies بتاعة Kivo نفسه (package.ps1)، مش منظمة. */
+#policies-container-content {
+  display: none !important;
+}

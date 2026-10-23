@@ -1,0 +1,219 @@
+/*
+ * شكل Kivo فوق واجهة Firefox (docs/FIREFOX.md، G1). KivoTheme.sys.mjs بيحط الألوان (--kivo-*) و kivo-mode و
+ * kivo-corners على :root، والملف ده بيربطهم بمتغيرات Firefox وبيغيّر الشكل.
+ * متغيرات Firefox جوه @layer، فأي حاجة هنا من غير layer بتكسبها. والـ !important للقواعد اللي Firefox كاتبها
+ * بـ selectors طويلة (Nova مثلًا).
+ * الشكل زي Chrome: التاب المختار ملزوق في شريط الأدوات وبلونه، وشريط العنوان كبسولة.
+ */
+
+/* خطوط الثيم، نفس اللي في صفحات Kivo (sync.ps1 بيعمله من web/ui). */
+@import url("chrome://browser/content/kivo/fonts.css");
+/* الـ workspaces (G4). */
+@import url("chrome://browser/content/kivo/workspaces.css");
+/* زرار الـ profile (G3). */
+@import url("chrome://browser/content/kivo/profile-menu.css");
+
+:root[kivo-theme] {
+  --kivo-radius: 10px;
+  --kivo-field-radius: 12px;
+
+  /* شريط التابات */
+  --toolbox-background-color: var(--kivo-tabs);
+  --toolbox-background-color-inactive: var(--kivo-tabs);
+  --toolbox-text-color: var(--kivo-tabs-ink);
+  --toolbox-text-color-inactive: color-mix(in srgb, var(--kivo-tabs-ink) 72%, transparent);
+  --toolbox-background-image: none;
+  --toolbox-background-gradient: none;
+  --tabs-navbar-separator-style: none;
+
+  /* التابات */
+  --tab-border-radius: var(--kivo-radius);
+  --tab-background-color-selected: var(--kivo-toolbar);
+  --tab-text-color-selected: var(--kivo-toolbar-ink);
+  --tab-background-color-hover: color-mix(in srgb, var(--kivo-tabs-ink) 9%, transparent);
+  --tab-border-color: transparent;
+  --tab-border-color-hover: transparent;
+  --tab-border-color-selected: transparent;
+  --tab-box-shadow-selected: none;
+  --tab-min-height: 34px;
+
+  /* شريط الأدوات */
+  --toolbar-background-color: var(--kivo-toolbar);
+  --toolbar-text-color: var(--kivo-toolbar-ink);
+  --toolbarbutton-icon-fill: var(--kivo-toolbar-ink);
+  --toolbarbutton-border-radius: var(--kivo-radius);
+  --toolbarbutton-background-color-hover: color-mix(in srgb, var(--kivo-toolbar-ink) 9%, transparent);
+  --toolbarbutton-background-color-active: color-mix(in srgb, var(--kivo-toolbar-ink) 15%, transparent);
+
+  /* شريط العنوان */
+  --toolbar-field-background-color: color-mix(in srgb, var(--kivo-toolbar-ink) 7%, var(--kivo-toolbar));
+  --toolbar-field-background-color-focus: var(--kivo-field-focus);
+  --toolbar-field-text-color: var(--kivo-toolbar-ink);
+  --toolbar-field-text-color-focus: var(--kivo-toolbar-ink);
+  --toolbar-field-border-color: transparent;
+  --toolbar-field-border-color-focus: var(--kivo-accent);
+
+  --focus-outline-color: var(--kivo-accent);
+}
+
+/*
+ * القوايم والـ panels (G5): خط Kivo واستدارته، والـ hover بلون الـ profile. القوايم بتاخد ألوان Windows (Menu)، فالـ
+ * hover بس هو اللي بيتلوّن، عشان تفضل مقروءة على أي خلفية. والـ tokens دي كمان بتلوّن الـ checkboxes والأزرار الأساسية
+ * في النافذة.
+ */
+:root[kivo-theme] {
+  --border-radius-small: max(4px, calc(var(--kivo-radius) - 4px));
+  --border-radius-medium: var(--kivo-radius);
+  --border-radius-large: calc(var(--kivo-radius) + 6px);
+  --panel-border-radius: calc(var(--kivo-radius) + 4px);
+  --arrowpanel-border-radius: calc(var(--kivo-radius) + 4px);
+  --panel-menuitem-border-radius: max(4px, calc(var(--kivo-radius) - 4px));
+  --menuitem-border-radius: max(4px, calc(var(--kivo-radius) - 4px));
+  --color-accent-primary: var(--kivo-accent);
+  --color-accent-primary-hover: color-mix(in srgb, var(--kivo-accent) 88%, black);
+  --color-accent-primary-active: color-mix(in srgb, var(--kivo-accent) 78%, black);
+  --button-text-color-primary: var(--kivo-on-accent);
+  --button-text-color-primary-hover: var(--kivo-on-accent);
+  --button-text-color-primary-active: var(--kivo-on-accent);
+  /* الـ hover في القوايم الجانبية (زي قايمة الإعدادات) وأزرار الأيقونات: لون الـ profile الخفيف بدل بنفسجي Firefox. */
+  --button-background-color-ghost-hover: color-mix(in srgb, var(--kivo-accent) 14%, transparent);
+  --button-background-color-ghost-active: color-mix(in srgb, var(--kivo-accent) 22%, transparent);
+  --kivo-hover: color-mix(in srgb, var(--kivo-accent) 16%, transparent);
+}
+
+:root[kivo-theme] :is(menupopup, panel, #PersonalToolbar) {
+  font-family: var(--kivo-font);
+}
+
+:root[kivo-theme] :is(menuitem, menu)[_moz-menuactive]:not([disabled]) {
+  background-color: var(--kivo-hover);
+  color: inherit;
+}
+
+:root[kivo-theme] panel .subviewbutton:not([disabled]):is(:hover, :focus-visible) {
+  background-color: var(--kivo-hover) !important;
+}
+
+/* أزرار شريط التابات نفسه (قايمة التابات، والتاب الجديد، و Firefox View): بلون كلام شريط التابات، مش شريط الأدوات. */
+:root[kivo-theme] #TabsToolbar {
+  --toolbarbutton-icon-fill: var(--kivo-tabs-ink);
+  --toolbarbutton-background-color-hover: color-mix(in srgb, var(--kivo-tabs-ink) 12%, transparent);
+  --toolbarbutton-background-color-active: color-mix(in srgb, var(--kivo-tabs-ink) 18%, transparent);
+}
+
+:root[kivo-mode="light"] {
+  color-scheme: light;
+  --toolbar-color-scheme: light;
+  --tab-selected-color-scheme: light;
+  --kivo-field-focus: #ffffff;
+}
+
+:root[kivo-mode="dark"] {
+  color-scheme: dark;
+  --toolbar-color-scheme: dark;
+  --tab-selected-color-scheme: dark;
+  --kivo-field-focus: color-mix(in srgb, #000 22%, var(--kivo-toolbar));
+}
+
+/* نفس الاستدارة اللي في صفحات Kivo (web/ui/src/theme.css). */
+:root[kivo-corners="soft"] {
+  --kivo-radius: 6px;
+  --kivo-field-radius: 8px;
+}
+
+:root[kivo-corners="round"] {
+  --kivo-radius: 10px;
+  --kivo-field-radius: 12px;
+}
+
+:root[kivo-corners="bubbly"] {
+  --kivo-radius: 14px;
+  --kivo-field-radius: 999px;
+}
+
+/* التاب المختار نازل لحد شريط الأدوات ومن غير حدود، والباقيين من غير خلفية لحد الـ hover. */
+:root[kivo-theme] #tabbrowser-tabs[orient="horizontal"] {
+  .tab-background {
+    margin-block: 6px 0 !important;
+    border: 0 !important;
+    border-radius: var(--kivo-radius) var(--kivo-radius) 0 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected], [multiselected]) {
+    margin-block-end: 4px !important;
+    border-radius: var(--kivo-radius) !important;
+  }
+
+  .tab-background:is([selected], [multiselected]) {
+    position: relative;
+    background: var(--kivo-toolbar) !important;
+
+    /* الانحناءة اللي بتوصّل التاب بشريط الأدوات من الجنبين، زي Chrome. */
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset-block-end: 0;
+      width: var(--kivo-radius);
+      height: var(--kivo-radius);
+      pointer-events: none;
+    }
+
+    &::before {
+      inset-inline-start: calc(-1 * var(--kivo-radius));
+      background: radial-gradient(circle at 0 0, transparent var(--kivo-radius), var(--kivo-toolbar) calc(var(--kivo-radius) + 0.5px));
+    }
+
+    &::after {
+      inset-inline-end: calc(-1 * var(--kivo-radius));
+      background: radial-gradient(circle at 100% 0, transparent var(--kivo-radius), var(--kivo-toolbar) calc(var(--kivo-radius) + 0.5px));
+    }
+
+    &:dir(rtl)::before {
+      background: radial-gradient(circle at 100% 0, transparent var(--kivo-radius), var(--kivo-toolbar) calc(var(--kivo-radius) + 0.5px));
+    }
+
+    &:dir(rtl)::after {
+      background: radial-gradient(circle at 0 0, transparent var(--kivo-radius), var(--kivo-toolbar) calc(var(--kivo-radius) + 0.5px));
+    }
+  }
+}
+
+/* الانحناءة بتطلع برا التاب بـ --kivo-radius، و Firefox بيقص التاب على 2px بس (overflow-clip-margin في tabs.css)،
+ * فكان باين منها حتة صغيرة زي درجة. وأول تاب على حرف الـ scrollbox، فمسافة في أوله بقد الانحناءة. */
+:root[kivo-theme] #tabbrowser-tabs[orient="horizontal"] .tabbrowser-tab:is([selected], [multiselected]) {
+  overflow-clip-margin: calc(var(--kivo-radius) + 2px);
+}
+
+:root[kivo-theme] #tabbrowser-arrowscrollbox[orient="horizontal"]::part(scrollbox) {
+  padding-inline-start: var(--kivo-radius);
+}
+
+/* خط الثيم في عناوين التابات، زي صفحات Kivo. شريط العنوان بيفضل بخط Windows عشان الـ URL يتقري بسهولة. */
+:root[kivo-theme] .tab-label {
+  font-family: var(--kivo-font);
+}
+
+/* شريط العنوان: من غير حدود وهو مش متعلم عليه، وبحلقة بلون الـ profile وهو متعلم عليه. الاستدارة من الثيم وهو
+ * مقفول بس: القايمة اللي بتنزل منه بتفضل باستدارة Firefox، لأن كبسولة كاملة بتقص الاقتراحات. */
+:root[kivo-theme] #urlbar:not([open]) > .urlbar-background {
+  border: 0 !important;
+  border-radius: var(--kivo-field-radius) !important;
+  box-shadow: none !important;
+}
+
+:root[kivo-theme] #urlbar[focused]:not([open]) > .urlbar-background {
+  outline: 2px solid var(--kivo-accent) !important;
+  outline-offset: -2px;
+}
+
+:root[kivo-theme] #nav-bar {
+  box-shadow: none !important;
+}
+
+/* صفحة البداية جزء من Kivo: من غير "Extension (Kivo Home)" في شريط العنوان، زي التاب الجديد في Chrome. */
+:root[kivo-home] :is(#identity-box, .identity-box) {
+  display: none !important;
+}

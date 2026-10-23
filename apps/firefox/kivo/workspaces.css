@@ -1,0 +1,469 @@
+/*
+ * الـ workspaces (G4، KivoWorkspaces.sys.mjs): الزرار في أول شريط التابات، والقايمة بتاعته. بشكل Kivo: خط الثيم،
+ * واستدارته (--kivo-radius)، ولونه (--kivo-accent). لون كل workspace في --kivo-ws-color.
+ */
+
+/* ---------- الزرار ---------- */
+
+#kivo-workspaces-button {
+  align-items: center;
+  padding-inline: 4px 2px;
+}
+
+:root[privatebrowsingmode] #kivo-workspaces-button {
+  display: none;
+}
+
+.kivo-ws-button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 170px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--kivo-radius, 8px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+
+  &:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  &:hover:active,
+  &[open] {
+    background: color-mix(in srgb, currentColor 16%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: -2px;
+  }
+
+  /* في workspace: الاسم جنب اللون. */
+  &:has(.kivo-ws-label:not(:empty)) {
+    padding-inline-end: 10px;
+  }
+}
+
+.kivo-ws-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--kivo-ws-color);
+  color: var(--kivo-ws-ink, #fff);
+  font: 700 11px/1 var(--kivo-font, "Segoe UI"), sans-serif;
+
+  /* في الزرار: الهيدر بنفس اللون (KivoTheme)، فحلقة بلون الكلام عشان تبان. */
+  .kivo-ws-button > &:not(:empty) {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 70%, transparent);
+  }
+
+  /* النافذة مش workspace: أيقونة بلون أيقونات شريط التابات (kivo.css، #TabsToolbar). */
+  &:empty {
+    background: url("chrome://browser/content/kivo/workspaces.svg") center / 16px no-repeat;
+    -moz-context-properties: fill;
+    fill: var(--toolbarbutton-icon-fill, currentColor);
+  }
+}
+
+.kivo-ws-label {
+  overflow: hidden;
+  font-family: var(--kivo-font, "Segoe UI"), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  &:empty {
+    display: none;
+  }
+}
+
+/* ---------- القايمة ---------- */
+
+.kivo-ws {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  padding: 12px;
+  font-family: var(--kivo-font, "Segoe UI"), sans-serif;
+  font-size: 13px;
+
+  button {
+    appearance: none;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+  }
+}
+
+.kivo-ws-title {
+  padding: 2px 6px 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.kivo-ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.kivo-ws-row {
+  display: flex;
+  align-items: center;
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+
+  &:hover,
+  &[current] {
+    background: color-mix(in srgb, currentColor 7%, transparent);
+  }
+}
+
+.kivo-ws-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: start;
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: -2px;
+  }
+
+  .kivo-ws-badge {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--kivo-radius, 10px);
+    font-size: 16px;
+  }
+}
+
+.kivo-ws-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kivo-ws-name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kivo-ws-meta {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.kivo-ws-edit {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-inline-end: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: url("chrome://global/skin/icons/edit-outline.svg") center / 16px no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  /* باين على طول، عشان التعديل يبان من أول مرة. */
+  opacity: 0.7;
+
+  &:hover {
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+    opacity: 1;
+  }
+}
+
+.kivo-ws-empty {
+  margin: 0 6px 4px;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.kivo-ws-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1.5px dashed color-mix(in srgb, var(--kivo-accent, AccentColor) 55%, transparent);
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+  background: none;
+  color: var(--kivo-accent, AccentColor) !important;
+  font-weight: 600 !important;
+
+  &::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: url("chrome://global/skin/icons/plus.svg") center / 16px no-repeat;
+    -moz-context-properties: fill;
+    fill: currentColor;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--kivo-accent, AccentColor) 10%, transparent);
+  }
+}
+
+/* ---------- جديدة أو تعديل ---------- */
+
+.kivo-ws-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.kivo-ws-input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: var(--kivo-radius, 10px);
+  background: Field;
+  color: FieldText;
+  font: inherit;
+
+  &:focus {
+    border-color: var(--kivo-accent, AccentColor);
+    outline: 2px solid color-mix(in srgb, var(--kivo-accent, AccentColor) 35%, transparent);
+  }
+}
+
+.kivo-ws-color-title {
+  margin-block-end: -2px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.kivo-ws-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+/* أي لون: دايرة بألوان قوس قزح وعليها "+"، أو اللون نفسه لو مش من الجاهزين. بتفتح المنتقي تحتها. */
+.kivo-ws-more {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(#ff4f5e, #ffc21a, #5ad16b, #14c2d6, #3b6cf6, #c05cff, #ff4f9a, #ff4f5e);
+
+  &::before {
+    content: "+";
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--arrowpanel-background, Canvas);
+    color: var(--arrowpanel-color, CanvasText);
+    font: 700 12px/1 "Segoe UI", sans-serif;
+  }
+
+  &[aria-pressed="true"] {
+    box-shadow:
+      0 0 0 2px var(--arrowpanel-background, Canvas),
+      0 0 0 4px var(--kivo-ws-color);
+
+    &::before {
+      background: var(--kivo-ws-color);
+      color: var(--kivo-ws-ink, #fff);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 3px;
+  }
+}
+
+/* المنتقي، زي Chrome: المربع (التشبع يمين وشمال، والفتاحة فوق وتحت)، وشريط الدرجة، والكود. */
+.kivo-ws-picker {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--kivo-radius, 10px);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.kivo-ws-sv {
+  position: relative;
+  height: 120px;
+  border-radius: 8px;
+  background-color: var(--kivo-ws-hue, red);
+  background-image: linear-gradient(to top, rgb(0 0 0), rgb(0 0 0 / 0)), linear-gradient(to right, rgb(255 255 255), rgb(255 255 255 / 0));
+  touch-action: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 2px;
+  }
+}
+
+.kivo-ws-sv-dot {
+  position: absolute;
+  left: var(--x, 0%);
+  top: var(--y, 0%);
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--kivo-ws-color);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.kivo-ws-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kivo-ws-hex {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 12px/1 Consolas, "Cascadia Mono", monospace;
+
+  &:focus-visible {
+    border-color: var(--kivo-accent, AccentColor);
+    outline: none;
+  }
+}
+
+.kivo-ws-hue {
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(0 100% 50%),
+    hsl(60 100% 50%),
+    hsl(120 100% 50%),
+    hsl(180 100% 50%),
+    hsl(240 100% 50%),
+    hsl(300 100% 50%),
+    hsl(360 100% 50%)
+  );
+
+  &::-moz-range-track {
+    background: transparent;
+  }
+
+  &::-moz-range-progress {
+    background: transparent;
+  }
+
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 3px;
+  }
+}
+
+.kivo-ws-preview {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--kivo-ws-color);
+}
+
+.kivo-ws-swatch {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--kivo-ws-color);
+
+  &[aria-checked="true"] {
+    box-shadow:
+      0 0 0 2px var(--arrowpanel-background, Canvas),
+      0 0 0 4px var(--kivo-ws-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 3px;
+  }
+}
+
+.kivo-ws-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.kivo-ws-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  button {
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--kivo-radius, 8px);
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    font-weight: 600;
+  }
+
+  .kivo-ws-save {
+    background: var(--kivo-accent, AccentColor);
+    color: var(--kivo-on-accent, AccentColorText);
+  }
+
+  .kivo-ws-delete {
+    background: none;
+    color: #d93d4a;
+  }
+}
+
+.kivo-ws-spacer {
+  flex: 1;
+}

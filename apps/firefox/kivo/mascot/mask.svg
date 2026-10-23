@@ -1,0 +1,5 @@
+<!-- Kivo private-window icon: a plain white mask on a circle. The circle takes the page's context-fill, like Firefox's. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+<circle cx="24" cy="24" r="24" fill="context-fill #4f3fae"/>
+<path fill="#fff" fill-rule="evenodd" d="M9 21C9 17.5 12.5 16.5 16 16.5C19 16.5 20.5 18 24 18C27.5 18 29 16.5 32 16.5C35.5 16.5 39 17.5 39 21C39 27.5 35 32 30.5 32C27.5 32 26.5 29.5 24 29.5C21.5 29.5 20.5 32 17.5 32C13 32 9 27.5 9 21ZM13.8 23.5a3.2 2.3 0 1 0 6.4 0a3.2 2.3 0 1 0 -6.4 0ZM27.8 23.5a3.2 2.3 0 1 0 6.4 0a3.2 2.3 0 1 0 -6.4 0Z"/>
+</svg>

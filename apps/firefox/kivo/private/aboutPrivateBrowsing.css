@@ -1,0 +1,77 @@
+/*
+ * Kivo (G3): صفحة النافذة الخاصة. الملف ده بيتحط مكان aboutPrivateBrowsing.css بتاع Firefox (jar.mn، % override)،
+ * فبيحمّله الأول وبعدين بيغيّر عليه. ليل هادي بلون Kivo، زي النافذة الخاصة نفسها (KivoTheme.sys.mjs بيخليها غامقة)،
+ * من غير أطفال ولا زخرفة التعلب، وبقناع بسيط (mascot/mask.svg) وخط Kivo. الـ CSP بيسمح بـ chrome: بس، والخطوط من
+ * chrome://kivo-fonts.
+ */
+@import url("chrome://browser/content/kivo/firefox/aboutPrivateBrowsing.css");
+@import url("chrome://browser/content/kivo/fonts.css");
+
+html.private {
+  --kivo-night: #15132a;
+  --kivo-night-glow: rgb(121 100 188 / 30%);
+  --kivo-night-glow-2: rgb(56 189 248 / 12%);
+  --kivo-night-ink: #f1effa;
+  --kivo-night-muted: #b9b4d6;
+  --kivo-night-field: #262343;
+  --kivo-night-line: #3a3562;
+  --kivo-night-accent: #a593e6;
+
+  --background-color-canvas: var(--kivo-night) !important;
+  --link-color: var(--kivo-night-accent) !important;
+  --link-color-hover: #c3b6f2 !important;
+  --link-color-active: #c3b6f2 !important;
+
+  color-scheme: dark;
+  color: var(--kivo-night-ink) !important;
+  font-family: "Readex Pro", "Segoe UI", system-ui, sans-serif;
+  background:
+    radial-gradient(55% 45% at 50% 0%, var(--kivo-night-glow), transparent),
+    radial-gradient(45% 40% at 100% 100%, var(--kivo-night-glow-2), transparent),
+    var(--kivo-night) !important;
+  background-attachment: fixed !important;
+}
+
+/* Firefox's full-page fox tail. */
+html.private body::before {
+  content: none !important;
+}
+
+html.private .logo {
+  width: 72px !important;
+  height: 72px !important;
+  background-size: 72px !important;
+  fill: #4f3fae;
+  -moz-context-properties: fill;
+  filter: drop-shadow(0 8px 24px rgb(121 100 188 / 45%));
+}
+
+html.private :is(h1, .nova-tagline, #info-title) {
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--kivo-night-ink);
+}
+
+html.private :is(.nova-subheader, #info-body, .info) {
+  color: var(--kivo-night-muted);
+}
+
+/* شريط البحث زي شريط العنوان في Kivo: كبسولة هادية. */
+html.private content-search-handoff-ui {
+  --content-search-handoff-ui-background-color: var(--kivo-night-field) !important;
+  --content-search-handoff-ui-unfocused-border-color: var(--kivo-night-line) !important;
+  --content-search-handoff-ui-fakefocus-border-color: var(--kivo-night-accent) !important;
+  --content-search-handoff-ui-fakefocus-box-shadow-inner: var(--kivo-night-accent) !important;
+  --content-search-handoff-ui-fakefocus-box-shadow-outer: rgb(165 147 230 / 30%) !important;
+  --content-search-handoff-ui-border-radius: 999px !important;
+  border-radius: 999px;
+}
+
+html.private .info-border {
+  border-color: var(--kivo-night-line) !important;
+}
+
+a:link,
+.text-link {
+  background-color: transparent !important;
+}

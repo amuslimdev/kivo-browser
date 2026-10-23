@@ -1,0 +1,45 @@
+/*
+ * Kivo (G3): صفحات الـ profile الجديد والتعديل والمسح. بيتحط مكان profiles-pages.css بتاع Firefox، اللي
+ * edit-profile-card.css و delete-profile-card.css بيعملوله import، في الصفحة وجوه الـ shadow root.
+ */
+@import url("chrome://browser/content/kivo/firefox/profiles-pages.css");
+@import url("chrome://browser/content/kivo/fonts.css");
+@import url("chrome://browser/content/kivo/profiles/kivo-pages.css");
+
+:host {
+  --header-avatar-size: 96px;
+}
+
+moz-card {
+  --card-border: 0 solid transparent;
+  --card-border-radius: 26px;
+  --card-background-color: var(--kivo-card);
+  --card-box-shadow: var(--kivo-card-shadow);
+}
+
+#edit-profile-card,
+#delete-profile-card {
+  padding: 28px;
+}
+
+#header-avatar {
+  box-shadow:
+    0 0 0 4px var(--kivo-card),
+    0 8px 18px rgb(0 0 0 / 18%);
+}
+
+#profile-name {
+  border-radius: 12px;
+  min-height: 40px;
+  font-size: 1.05rem;
+}
+
+/* الشكل (الثيم والأفاتار) بيتغير من صفحة البداية في Kivo (Customize)، فمفيش ثيمات Firefox ولا أفاتاراته هنا.
+ * واختصار الـ desktop بتاع Firefox بيشغّل المحرك من غير Kivo.exe، يعني من غير هوية Kivo. */
+#themes,
+#more-themes,
+#desktop-shortcut-section,
+#profile-avatar-selector-button,
+.avatar-selector-parent {
+  display: none !important;
+}

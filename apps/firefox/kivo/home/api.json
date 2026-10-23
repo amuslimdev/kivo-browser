@@ -1,0 +1,32 @@
+[
+  {
+    "namespace": "kivo",
+    "description": "Kivo host bridge for the start page (shared/bridge/README.md).",
+    "functions": [
+      {
+        "name": "request",
+        "type": "function",
+        "description": "Send one bridge message and get its reply.",
+        "async": true,
+        "parameters": [
+          {
+            "name": "message",
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "payload": { "type": "object", "additionalProperties": { "type": "any" } }
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onRefresh",
+        "type": "function",
+        "description": "Kivo changed something the page shows, like the color of the window's workspace. The page reads it again.",
+        "parameters": []
+      }
+    ]
+  }
+]

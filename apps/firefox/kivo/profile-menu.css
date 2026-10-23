@@ -1,0 +1,345 @@
+/*
+ * زرار الـ profile بتاع Kivo وقايمته (KivoProfileMenu.sys.mjs). بشكل Kivo: خط الثيم واستدارته ولونه.
+ * حساب Mozilla مقفول، فزراره و "Profiles" في القايمة الرئيسية (اللي بيفتح قايمة Firefox) متخفيين، والـ profiles هنا بس.
+ */
+
+#fxa-toolbar-menu-button,
+#appMenu-profiles-button {
+  display: none !important;
+}
+
+/* ---------- الزرار ---------- */
+
+#kivo-profile-button {
+  align-items: center;
+  padding-inline: 2px;
+}
+
+.kivo-pm-button {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+
+  &:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  &:hover:active,
+  &[open] {
+    background: color-mix(in srgb, currentColor 16%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 0;
+  }
+
+  img {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--kivo-accent, AccentColor) 60%, transparent);
+  }
+
+  img:not([src]) {
+    visibility: hidden;
+  }
+}
+
+/* ---------- القايمة ---------- */
+
+.kivo-pm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  padding: 12px;
+  font-family: var(--kivo-font, "Segoe UI"), sans-serif;
+  font-size: 13px;
+
+  button {
+    appearance: none;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+  }
+}
+
+.kivo-pm-me {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px 14px;
+  border-radius: calc(var(--kivo-radius, 10px) + 4px);
+  background: color-mix(in srgb, var(--kivo-accent, AccentColor) 13%, transparent);
+  text-align: center;
+}
+
+.kivo-pm-me-avatar {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px var(--arrowpanel-background, Canvas),
+    0 6px 16px rgb(0 0 0 / 18%);
+}
+
+.kivo-pm-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.kivo-pm-sub {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.kivo-pm-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+
+  button {
+    height: 30px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--kivo-radius, 8px);
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    font-weight: 600;
+
+    &:hover {
+      background: color-mix(in srgb, currentColor 16%, transparent);
+    }
+  }
+
+  .kivo-pm-look {
+    background: var(--kivo-accent, AccentColor);
+    color: var(--kivo-on-accent, AccentColorText);
+
+    &:hover {
+      background: color-mix(in srgb, var(--kivo-accent, AccentColor) 85%, black);
+    }
+  }
+}
+
+.kivo-pm-title {
+  padding: 4px 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.kivo-pm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.kivo-pm-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+  background: none;
+  text-align: start;
+
+  &:hover {
+    background: color-mix(in srgb, currentColor 7%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: -2px;
+  }
+}
+
+.kivo-pm-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  -moz-context-properties: fill, stroke;
+}
+
+.kivo-pm-profile-name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * الـ Sync: كارت خفيف تحت الـ profile. "Sync this profile" زرار كله، و "Sync is on" فيه الإيميل في سطر لوحده و
+ * Sync now تحته، والإعدادات على الجنب. جوه .kivo-pm عشان قاعدة "button" بتاعته (color: inherit) ماتغلبش لون الزرار.
+ */
+.kivo-pm .kivo-pm-sync {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 0;
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+
+  &:is(button):hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: -2px;
+  }
+}
+
+.kivo-pm .kivo-pm-sync-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  background: url("chrome://browser/skin/sync.svg") center / 18px no-repeat;
+  -moz-context-properties: fill;
+  fill: var(--kivo-accent, AccentColor);
+}
+
+.kivo-pm .kivo-pm-sync[problem] .kivo-pm-sync-icon {
+  background-image: url("chrome://global/skin/icons/warning.svg");
+  fill: #e8a020;
+}
+
+.kivo-pm .kivo-pm-sync-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kivo-pm .kivo-pm-sync-title {
+  font-weight: 600;
+}
+
+.kivo-pm .kivo-pm-sync-email {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kivo-pm .kivo-pm-sync-now {
+  margin-top: 8px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--kivo-accent, AccentColor);
+  color: var(--kivo-on-accent, AccentColorText);
+  font-size: 12px;
+  font-weight: 600;
+
+  &:hover {
+    background: color-mix(in srgb, var(--kivo-accent, AccentColor) 85%, black);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.kivo-pm .kivo-pm-sync-settings {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-block-start: -4px;
+  margin-inline-end: -4px;
+  border: 0;
+  border-radius: 8px;
+  background: url("chrome://global/skin/icons/settings.svg") center / 16px no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+
+  &:hover {
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+  }
+}
+
+.kivo-pm-promo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  opacity: 0.9;
+
+  img {
+    width: 200px;
+    height: 122px;
+    object-fit: contain;
+  }
+}
+
+.kivo-pm-add,
+.kivo-pm-manage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: calc(var(--kivo-radius, 10px) + 2px);
+
+  &::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: center / 16px no-repeat;
+    -moz-context-properties: fill;
+    fill: currentColor;
+  }
+}
+
+.kivo-pm-add {
+  justify-content: center;
+  border: 1.5px dashed color-mix(in srgb, var(--kivo-accent, AccentColor) 55%, transparent);
+  background: none;
+  color: var(--kivo-accent, AccentColor) !important;
+  font-weight: 600 !important;
+
+  &::before {
+    background-image: url("chrome://global/skin/icons/plus.svg");
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--kivo-accent, AccentColor) 10%, transparent);
+  }
+}
+
+.kivo-pm-manage {
+  border: 0;
+  background: none;
+
+  &::before {
+    background-image: url("chrome://global/skin/icons/settings.svg");
+  }
+
+  &:hover {
+    background: color-mix(in srgb, currentColor 7%, transparent);
+  }
+}

@@ -1,0 +1,9 @@
+<!-- Kivo profile card cover (bubbles): context-fill is the profile color, context-stroke the color on it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 544">
+<defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient></defs>
+<rect width="800" height="544" fill="context-fill"/>
+<g fill="#fff" opacity=".18"><circle cx="90" cy="90" r="70"/><circle cx="700" cy="460" r="110"/><circle cx="560" cy="520" r="50"/><circle cx="740" cy="110" r="36"/><circle cx="130" cy="470" r="44"/></g>
+<g fill="none" stroke="context-stroke" stroke-opacity=".32" stroke-width="10"><circle cx="230" cy="70" r="34"/><circle cx="640" cy="90" r="58"/><circle cx="60" cy="300" r="26"/><circle cx="760" cy="300" r="22"/></g>
+<g fill="context-stroke" fill-opacity=".35"><circle cx="300" cy="490" r="14"/><circle cx="520" cy="40" r="12"/><circle cx="170" cy="210" r="10"/></g>
+<rect width="800" height="544" fill="url(#shade)"/>
+</svg>

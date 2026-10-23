@@ -1,0 +1,202 @@
+# Kivo look (G1): chrome://browser/content/kivo/
+# Kivo Home (G2): a built-in extension. Anything under builtin-addons/<dir>/ with a manifest.json is
+# listed in built_in_addons.json and installed at startup, like Firefox's own newtab.
+# ui/ is the web/ui build and fonts.css is made from web/ui/src/theme.css (tools/sync.ps1).
+# Kivo profiles (G3): profiles/ restyles Firefox's profile pages; see the overrides at the end.
+# Kivo workspaces (G4): workspaces.css, imported by kivo.css, and the button icon.
+# Kivo profile button (G3): profile-menu.css, imported by kivo.css.
+browser.jar:
+    content/browser/kivo/kivo.css (kivo.css)
+    content/browser/kivo/fonts.css (fonts.css)
+    content/browser/kivo/workspaces.css (workspaces.css)
+    content/browser/kivo/workspaces.svg (workspaces.svg)
+    content/browser/kivo/profile-menu.css (profile-menu.css)
+    content/browser/kivo/pages.css (pages.css)
+    content/browser/kivo/profiles/ (profiles/*)
+    content/browser/kivo/firefox/profile-selector.css (/browser/components/profiles/content/profile-selector.css)
+    content/browser/kivo/firefox/profile-card.css (/browser/components/profiles/content/profile-card.css)
+    content/browser/kivo/firefox/profiles-pages.css (/browser/components/profiles/content/profiles-pages.css)
+    content/browser/kivo/private/aboutPrivateBrowsing.css (private/aboutPrivateBrowsing.css)
+    content/browser/kivo/firefox/aboutPrivateBrowsing.css (/browser/themes/shared/privatebrowsing/aboutPrivateBrowsing.css)
+    builtin-addons/kivo-home/manifest.json (home/manifest.json)
+    builtin-addons/kivo-home/api.json (home/api.json)
+    builtin-addons/kivo-home/api.js (home/api.js)
+    builtin-addons/kivo-home/ (ui/**)
+
+# The theme fonts from the Kivo Home files, as chrome:// for pages whose CSP allows only chrome: (fonts.css).
+% content kivo-fonts %builtin-addons/kivo-home/fonts/ contentaccessible=yes
+
+# No Firefox fox ("Kit") or Firefox logo anywhere in Kivo: the chrome registry swaps each image, so every
+# place that uses it changes at once. tools/fox-scan.mjs checks every fox image in the build against this list
+# (run it after a Firefox update).
+#
+# Kivo's heroes take the fox's place: the five children from the family game, in a light flat cartoon style.
+# Each picture is made for its place, or is a general mood for rare places (docs/MASCOT.md lists them all).
+# tools/make-mascot.ps1 makes mascot/<picture>[-<shape>].svg for every name below: the picture centered at the
+# proportions of the Firefox image it replaces (-tall 0.62, square, -4x3 1.3, -3x2 1.6, -wide 2.2). The pictures and
+# their ChatGPT prompts are in docs/art/mascot/heroes. mask.svg and none.svg are drawn by hand.
+    content/browser/kivo/mascot/extensions-wide.svg (mascot/extensions-wide.svg)
+    content/browser/kivo/mascot/extensions-3x2.svg (mascot/extensions-3x2.svg)
+    content/browser/kivo/mascot/extensions-off-4x3.svg (mascot/extensions-off-4x3.svg)
+    content/browser/kivo/mascot/themes-4x3.svg (mascot/themes-4x3.svg)
+    content/browser/kivo/mascot/themes.svg (mascot/themes.svg)
+    content/browser/kivo/mascot/new-profile-3x2.svg (mascot/new-profile-3x2.svg)
+    content/browser/kivo/mascot/security-error.svg (mascot/security-error.svg)
+    content/browser/kivo/mascot/passwords.svg (mascot/passwords.svg)
+    content/browser/kivo/mascot/restart.svg (mascot/restart.svg)
+    content/browser/kivo/mascot/concerned-3x2.svg (mascot/concerned-3x2.svg)
+    content/browser/kivo/mascot/concerned.svg (mascot/concerned.svg)
+    content/browser/kivo/mascot/concerned-4x3.svg (mascot/concerned-4x3.svg)
+    content/browser/kivo/mascot/concerned-wide.svg (mascot/concerned-wide.svg)
+    content/browser/kivo/mascot/empty-4x3.svg (mascot/empty-4x3.svg)
+    content/browser/kivo/mascot/empty-wide.svg (mascot/empty-wide.svg)
+    content/browser/kivo/mascot/happy.svg (mascot/happy.svg)
+    content/browser/kivo/mascot/happy-4x3.svg (mascot/happy-4x3.svg)
+    content/browser/kivo/mascot/safe.svg (mascot/safe.svg)
+    content/browser/kivo/mascot/safe-4x3.svg (mascot/safe-4x3.svg)
+    content/browser/kivo/mascot/safe-3x2.svg (mascot/safe-3x2.svg)
+    content/browser/kivo/mascot/profiles-3x2.svg (mascot/profiles-3x2.svg)
+    content/browser/kivo/mascot/ai.svg (mascot/ai.svg)
+    content/browser/kivo/mascot/ai-wide.svg (mascot/ai-wide.svg)
+    content/browser/kivo/mascot/hello-wide.svg (mascot/hello-wide.svg)
+    content/browser/kivo/mascot/hello-4x3.svg (mascot/hello-4x3.svg)
+    content/browser/kivo/mascot/hello.svg (mascot/hello.svg)
+    content/browser/kivo/mascot/hello-tall.svg (mascot/hello-tall.svg)
+    content/browser/kivo/mascot/hello-3x2.svg (mascot/hello-3x2.svg)
+    content/browser/kivo/mascot/mask.svg (mascot/mask.svg)
+    content/browser/kivo/mascot/none.svg (mascot/none.svg)
+
+# extensions: The Planner choosing among floating options: the Extensions menu and about:addons with no add-ons.
+% override chrome://browser/skin/addons/extensions-panel-empty-onboarding.svg chrome://browser/content/kivo/mascot/extensions-wide.svg
+% override chrome://mozapps/skin/extensions/kit-addons.svg chrome://browser/content/kivo/mascot/extensions-3x2.svg
+
+# extensions-off: The Quiet Boy with a grey puzzle piece: the Extensions menu when none is on here.
+% override chrome://browser/skin/addons/extensions-panel-empty.svg chrome://browser/content/kivo/mascot/extensions-off-4x3.svg
+
+# themes: The Energetic Girl painting: themes in about:addons, the add-ons welcome.
+% override chrome://mozapps/skin/extensions/kit-themes.svg chrome://browser/content/kivo/mascot/themes-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/br-amo-fox-paint.svg chrome://browser/content/kivo/mascot/themes.svg
+
+# new-profile: The Young Genius as an excited astronaut: the "Create a new profile" menu.
+% override chrome://browser/content/profiles/assets/kit-profiles-light.svg chrome://browser/content/kivo/mascot/new-profile-3x2.svg
+% override chrome://browser/content/profiles/assets/kit-profiles-dark.svg chrome://browser/content/kivo/mascot/new-profile-3x2.svg
+
+# security-error: The Planner inspecting a cracked padlock: the website security error page.
+% override chrome://global/skin/illustrations/security-error.svg chrome://browser/content/kivo/mascot/security-error.svg
+
+# passwords: The Young Genius with a key and a treasure chest: saved passwords.
+% override chrome://global/content/megalist/icons/cpm-fox-illustration.svg chrome://browser/content/kivo/mascot/passwords.svg
+
+# restart: The Little One, sleepy with a teddy: about:restartrequired.
+% override chrome://global/skin/illustrations/kit-sympathetic.svg chrome://browser/content/kivo/mascot/restart.svg
+
+# concerned: The Quiet Boy with an unplugged cable: no connection, a data breach, sync failed.
+% override chrome://global/skin/illustrations/no-connection.svg chrome://browser/content/kivo/mascot/concerned-3x2.svg
+% override chrome://browser/content/controlcenter/assets/fox-concern.svg chrome://browser/content/kivo/mascot/concerned.svg
+% override chrome://global/skin/illustrations/kit-concerned.svg chrome://browser/content/kivo/mascot/concerned-4x3.svg
+% override chrome://browser/skin/sidebar/kit-tabs-devices-error.svg chrome://browser/content/kivo/mascot/concerned-wide.svg
+
+# empty: The Little One peeking into an empty box: no history, no synced tabs.
+% override chrome://browser/skin/sidebar/kit-page-history.svg chrome://browser/content/kivo/mascot/empty-4x3.svg
+% override chrome://browser/skin/sidebar/kit-tabs-devices.svg chrome://browser/content/kivo/mascot/empty-wide.svg
+% override chrome://browser/skin/sidebar/kit-qr-tabs-devices-empty.svg chrome://browser/content/kivo/mascot/empty-wide.svg
+
+# happy: The Young Genius jumping with confetti: something worked.
+% override chrome://browser/content/asrouter/assets/fox-with-checkmark.svg chrome://browser/content/kivo/mascot/happy.svg
+% override chrome://browser/content/asrouter/assets/kit-checkmark.svg chrome://browser/content/kivo/mascot/happy.svg
+% override chrome://browser/content/asrouter/assets/kit-checkmark-flipped.svg chrome://browser/content/kivo/mascot/happy.svg
+% override chrome://global/skin/illustrations/kit-confetti.svg chrome://browser/content/kivo/mascot/happy-4x3.svg
+% override chrome://global/skin/illustrations/kit-happy.svg chrome://browser/content/kivo/mascot/happy-4x3.svg
+
+# safe: The Planner with a heart shield: backup, a lock, VPN.
+% override chrome://browser/content/asrouter/assets/fox-with-locked-box.svg chrome://browser/content/kivo/mascot/safe.svg
+% override chrome://browser/content/asrouter/assets/fox-with-box-on-cloud.svg chrome://browser/content/kivo/mascot/safe-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/fox-doodle-backup-restore.svg chrome://browser/content/kivo/mascot/safe-3x2.svg
+% override chrome://activity-stream/content/data/content/assets/br-backup-fox-in-box.svg chrome://browser/content/kivo/mascot/safe-3x2.svg
+% override chrome://activity-stream/content/data/content/assets/br-backup-fox-outside-box.svg chrome://browser/content/kivo/mascot/safe.svg
+% override chrome://global/skin/illustrations/kit-holding-lock.svg chrome://browser/content/kivo/mascot/safe.svg
+% override chrome://browser/content/ipprotection/assets/vpn-settings-get-started.svg chrome://browser/content/kivo/mascot/safe.svg
+
+# profiles: All five heroes together: the profiles message.
+% override chrome://browser/content/asrouter/assets/fox-with-profiles.svg chrome://browser/content/kivo/mascot/profiles-3x2.svg
+
+# ai: The Little One meeting a small robot: AI features.
+% override chrome://browser/content/aiwindow/assets/kit-meditating.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://browser/skin/preferences/fox-ai.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://browser/content/aiwindow/assets/agent-watch-empty.svg chrome://browser/content/kivo/mascot/ai-wide.svg
+% override chrome://browser/content/aiwindow/assets/model-choice-2.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://browser/content/aiwindow/assets/model-choice-3.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://browser/content/aiwindow/assets/smart-window-promo-default.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://browser/content/aiwindow/assets/set-default-onboarding.svg chrome://browser/content/kivo/mascot/ai.svg
+% override chrome://activity-stream/content/data/content/assets/mr-kit-smart-window.svg chrome://browser/content/kivo/mascot/ai.svg
+
+# hello: The Energetic Girl waving: welcome, onboarding, Firefox messages and promos.
+% override chrome://activity-stream/content/data/content/assets/fox-doodle-tail.png chrome://browser/content/kivo/mascot/hello-wide.svg
+% override chrome://activity-stream/content/data/content/assets/fox-doodle-waving.gif chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/fox-doodle-waving-static.png chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/br-set-default-fox-heart.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://activity-stream/content/data/content/assets/br-import-fox-house.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://activity-stream/content/data/content/assets/br-kit-with-heart.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://activity-stream/content/data/content/assets/br-fxa-fox-mirror.svg chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/br-gratitude-fox-rock.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://activity-stream/content/data/content/assets/br-migration-fox-juggle.svg chrome://browser/content/kivo/mascot/hello-tall.svg
+% override chrome://activity-stream/content/data/content/assets/kit-sit-look-up.svg chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://activity-stream/content/data/content/assets/person-typing.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://browser/content/asrouter/assets/fox-with-devices.svg chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://browser/content/asrouter/assets/fox-with-mobile.svg chrome://browser/content/kivo/mascot/hello-3x2.svg
+% override chrome://browser/content/asrouter/assets/kit-peek.svg chrome://browser/content/kivo/mascot/hello.svg
+% override chrome://browser/content/asrouter/assets/kit-peek-bottom.svg chrome://browser/content/kivo/mascot/hello-wide.svg
+% override chrome://browser/content/asrouter/assets/desktop-to-mobile-banner.svg chrome://browser/content/kivo/mascot/hello-wide.svg
+% override chrome://browser/skin/fxa/sync-promo-bookmarks.svg chrome://browser/content/kivo/mascot/hello-4x3.svg
+% override chrome://browser/skin/illustrations/tab-groups.svg chrome://browser/content/kivo/mascot/hello-3x2.svg
+% override chrome://global/content/defaultagent/default-browser-notification-privacy-image.svg chrome://browser/content/kivo/mascot/hello-3x2.svg
+
+# Private windows: no child. The page's full-screen fox decorations go away, and the private-window icon
+# (Firefox's mask with fox ears) is a plain mask.
+% override chrome://browser/skin/privatebrowsing/fox-tail.svg chrome://browser/content/kivo/mascot/none.svg
+% override chrome://browser/skin/privatebrowsing/kit-pbw.svg chrome://browser/content/kivo/mascot/none.svg
+% override chrome://browser/skin/privatebrowsing/pbm-logo.svg chrome://browser/content/kivo/mascot/mask.svg
+% override chrome://browser/skin/privatebrowsing/favicon.svg chrome://browser/content/kivo/mascot/mask.svg
+
+# The Kivo mark: Firefox logos, and small icons where a child would be unreadable.
+% override chrome://browser/content/logos/share-firefox.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/skin/firefox-view.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/skin/window-firefox.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/skin/sidebar/firefox.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/browsers/firefox.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-firefox-aurora.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-firefox-beta.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-firefox-logo.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-firefox-nightly.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-firefox-release.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/aboutdebugging-fenix.svg chrome://branding/content/about-logo.svg
+% override chrome://activity-stream/content/data/content/assets/mr-rtamo-background-image.svg chrome://branding/content/about-logo.svg
+% override chrome://activity-stream/content/data/content/assets/splash-logo.svg chrome://branding/content/about-logo.svg
+% override chrome://mozapps/skin/extensions/line.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/content/asrouter/assets/smiling-fox-icon.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/skin/sidebar/foxy.svg chrome://branding/content/about-logo.svg
+% override chrome://devtools/skin/images/fox-smiling.svg chrome://branding/content/about-logo.svg
+% override chrome://global/skin/illustrations/kit-in-circle.svg chrome://branding/content/about-logo.svg
+% override chrome://browser/content/aiwindow/assets/kit.svg chrome://branding/content/about-logo.svg
+
+# The account picture: a neutral person.
+% override chrome://browser/content/kit-signed-out.svg chrome://browser/skin/fxa/avatar-empty.svg
+% override chrome://browser/skin/fxa/avatar-fox.svg chrome://browser/skin/fxa/avatar-empty.svg
+% override chrome://browser/skin/fxa/avatar-fox-circle.svg chrome://browser/skin/fxa/avatar-empty-circle.svg
+
+# Kivo profiles (G3) on Firefox's profile pages: each Kivo stylesheet imports Firefox's own copy
+# (content/browser/kivo/firefox/) and adds to it, and the card covers are Kivo's, in the profile color.
+% override chrome://browser/content/profiles/profile-selector.css chrome://browser/content/kivo/profiles/profile-selector.css
+% override chrome://browser/content/profiles/profile-card.css chrome://browser/content/kivo/profiles/profile-card.css
+% override chrome://browser/content/profiles/profiles-pages.css chrome://browser/content/kivo/profiles/profiles-pages.css
+% override chrome://browser/content/profiles/assets/profilesBackground0.svg chrome://browser/content/kivo/profiles/cover0.svg
+% override chrome://browser/content/profiles/assets/profilesBackground1.svg chrome://browser/content/kivo/profiles/cover1.svg
+% override chrome://browser/content/profiles/assets/profilesBackground2.svg chrome://browser/content/kivo/profiles/cover2.svg
+% override chrome://browser/content/profiles/assets/profilesBackground3.svg chrome://browser/content/kivo/profiles/cover3.svg
+% override chrome://browser/content/profiles/assets/profilesBackground4.svg chrome://browser/content/kivo/profiles/cover4.svg
+% override chrome://browser/content/profiles/assets/plus.svg chrome://browser/content/kivo/profiles/plus.svg
+
+# The private window page in Kivo's night look (private/), on top of Firefox's own copy.
+% override chrome://browser/skin/privatebrowsing/aboutPrivateBrowsing.css chrome://browser/content/kivo/private/aboutPrivateBrowsing.css
+
+# about:logins without the Mozilla account and Sync steps (Kivo has no Mozilla account).

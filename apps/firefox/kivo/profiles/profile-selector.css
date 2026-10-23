@@ -1,0 +1,40 @@
+/*
+ * Kivo (G3): صفحة اختيار الـ profile. الملف ده بيتحط مكان profile-selector.css بتاع Firefox (jar.mn، % override)،
+ * فبيحمّله الأول وبعدين بيغيّر عليه. بيتحمّل في الصفحة نفسها وجوه الـ shadow root بتاع profile-selector.
+ */
+@import url("chrome://browser/content/kivo/firefox/profile-selector.css");
+@import url("chrome://browser/content/kivo/fonts.css");
+@import url("chrome://browser/content/kivo/profiles/kivo-pages.css");
+
+profile-selector {
+  padding: 6% 32px 32px;
+}
+
+.logo {
+  width: 88px;
+  height: 88px;
+  filter: drop-shadow(0 10px 18px rgb(16 32 82 / 22%));
+}
+
+h1[data-l10n-id="profile-window-heading"] {
+  font-size: 2.25rem;
+  margin-block-start: 14px;
+}
+
+.profiles-body-text {
+  max-width: 560px;
+  color: var(--kivo-page-muted);
+  line-height: 1.5;
+}
+
+.profile-list {
+  justify-content: center;
+  gap: 28px;
+  padding: 16px;
+  max-height: none;
+}
+
+moz-checkbox {
+  margin-block-start: 16px;
+  color: var(--kivo-page-muted);
+}
