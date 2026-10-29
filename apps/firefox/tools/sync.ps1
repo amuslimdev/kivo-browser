@@ -2,7 +2,7 @@
 .SYNOPSIS
     بيجيب Firefox بالنسخة اللي في firefox.lock، ويحط عليه branding و patches بتوع Kivo.
 .PARAMETER Update
-    بيحدّث firefox.lock لآخر revision في الفرع (release) قبل الـ sync.
+    بيحدّث firefox.lock لآخر Firefox نزل (الـ tag بتاعه في الفرع release) قبل الـ sync.
 .PARAMETER NoBootstrap
     مايشغّلش mach bootstrap حتى لو الأدوات مش موجودة.
 #>
@@ -18,20 +18,31 @@ if (-not (Test-Path (Join-Path $Source '.git'))) {
 }
 
 if ($Update) {
-    Invoke-Git -C $Source fetch --depth 50 origin $Lock.branch
-    $revision = (& git -C $Source rev-parse FETCH_HEAD).Trim()
+    # آخر Firefox نزل فعلًا، بالـ tag بتاعه (FIREFOX_159_0_RELEASE). آخر commit في الفرع ممكن يكون "version bump" للنسخة
+    # الجاية، والـ artifact build بينزّل محرك النسخة اللي اتبنت، فالهوية بتبقى أحدث منه ومابيفتحش (29 أكتوبر 2026).
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $latest = (Invoke-RestMethod 'https://product-details.mozilla.org/1.0/firefox_versions.json' -UseBasicParsing).LATEST_FIREFOX_VERSION
+    $tag = 'FIREFOX_' + ($latest -replace '\.', '_') + '_RELEASE'
+    Invoke-Git -C $Source fetch --depth 50 origin "refs/tags/${tag}:refs/tags/$tag"
+    $revision = (& git -C $Source rev-parse "$tag^{commit}").Trim()
     $version = (& git -C $Source show "${revision}:browser/config/version_display.txt").Trim()
+    if ($version -ne $latest) { throw "$tag is Firefox $version, not $latest" }
     $Lock.revision = $revision
     $Lock.version = $version
-    # LF من غير BOM، زي باقي الـ repo.
-    $json = ($Lock | ConvertTo-Json) -replace "`r`n", "`n"
+    # LF من غير BOM، زي باقي الـ repo. و PowerShell 5.1 بيكتب 4 مسافات و ":  "، فبنرجّعها لشكل الملف.
+    $json = ($Lock | ConvertTo-Json) -replace "`r`n", "`n" -replace '(?m)^    ', '  ' -replace '":  ', '": '
     [IO.File]::WriteAllText((Join-Path $FirefoxApp 'firefox.lock'), "$json`n", [Text.UTF8Encoding]::new($false))
     Write-Host "firefox.lock: $version ($revision)"
 }
 
 # الـ artifact build بيدوّر على أقرب revision ليه ملفات جاهزة، فمحتاج شوية history مش commit واحد.
+# PowerShell 5.1 مع Stop بيوقف السكريبت على أي سطر stderr، حتى لو رايح لـ $null، فعلى فولدر جديد (GitHub Actions)
+# الـ revision الناقص كان بيوقفه بدل ما يتجاب.
+$ErrorActionPreference = 'Continue'
 & git -C $Source cat-file -e "$($Lock.revision)^{commit}" 2>$null
-if ($LASTEXITCODE) { Invoke-Git -C $Source fetch --depth 50 origin $Lock.revision }
+$missing = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($missing) { Invoke-Git -C $Source fetch --depth 50 origin $Lock.revision }
 Invoke-Git -C $Source checkout --quiet --force --detach $Lock.revision
 # بيشيل نسخة الـ branding والملفات الجديدة من الـ sync اللي فات. الـ obj-* متجاهل في .gitignore بتاع Firefox، فالـ build بيفضل.
 Invoke-Git -C $Source clean -fdq

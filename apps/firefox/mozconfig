@@ -4,3 +4,5 @@ ac_add_options --enable-project=browser
 ac_add_options --enable-artifact-builds
 ac_add_options --with-branding=browser/branding/kivo
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-kivo
+# كل نسخة Firefox كبيرة بتطلب clobber، والـ artifact build بيتعمل تاني في دقايق، فمن غير ما update.ps1 يقف.
+mk_add_options AUTOCLOBBER=1

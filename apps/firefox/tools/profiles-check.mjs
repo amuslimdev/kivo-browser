@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // الـ profiles (G3) على Kivo، headless وبـ profile متسجل (kivo-bidi registered، هوية KivoTest في %APPDATA%\KivoTest):
 // أول profile باسم Windows، واللون والأفاتار بتوع Kivo في قاعدة بيانات Firefox وبيتغيروا مع الثيم والأفاتار، وثيمات
-// Firefox مابتغيرهمش، والـ profile التاني بيفتح بهوية Kivo، وصفحات الـ profiles بشكل Kivo. والصور: صفحة الاختيار،
-// وصفحة التعديل، والأفاتار.
+// Firefox مابتغيرهمش، والـ profile التاني بيفتح بهوية Kivo، وصفحات الـ profiles بشكل Kivo، والمسح من صفحة الاختيار
+// بكليك حقيقي بيمسح الـ profile من غير ما يفتحه. والصور: صفحة الاختيار، وصفحة التعديل، وتأكيد المسح، والأفاتار.
 //
 // node apps/firefox/tools/profiles-check.mjs --kivo <Kivo.exe> --out <فولدر>
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -293,6 +293,128 @@ try {
     edit.themes === false && edit.moreThemes === false && edit.shortcut !== true && edit.avatarButton === false, edit);
   check('edit page uses the Kivo font', /Readex Pro/.test(edit.font), edit.font);
   writeFileSync(join(args.out, 'profiles-edit.png'), await tabShot(kivo));
+
+  // المسح من صفحة الاختيار، بكليك حقيقي (الماوس على مكان الزرار، فاللي فوقه هو اللي بياخده) على زرار المسح في كارت
+  // Omar، وهو مقفول. Firefox كان بيفتح Omar بصفحة about:deleteprofile بدل ما يمسحه. execProcess متسجل ومابيفتحش حاجة،
+  // فأي فتح للـ profile بيبان هنا. Cancel الأول، وبعدين Delete.
+  const removal = JSON.parse(
+    await kivo.evaluate(`(async () => {
+      const { SelectableProfileService: S } = ChromeUtils.importESModule("resource:///modules/profiles/SelectableProfileService.sys.mjs");
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const launched = [];
+      const exec = S.execProcess;
+      S.execProcess = args => launched.push(args);
+      try {
+        gBrowser.selectedTab = gBrowser.addTrustedTab("about:profilemanager");
+        const tab = gBrowser.selectedTab;
+        let selector = null;
+        for (let i = 0; i < 40 && !selector?.shadowRoot?.querySelector("profile-card"); i++) {
+          await wait(250);
+          selector = gBrowser.selectedBrowser.contentDocument?.querySelector("profile-selector");
+        }
+        await selector.updateComplete;
+        const omar = (await S.getAllProfiles()).find(p => p.name === "Omar");
+        const dir = omar.path;
+        const avatar = omar.hasCustomAvatar ? omar.getAvatarPath() : null;
+
+        const dialog = () => new Promise(resolve => {
+          const seen = win => { Services.obs.removeObserver(seen, "common-dialog-loaded"); resolve(win); };
+          Services.obs.addObserver(seen, "common-dialog-loaded");
+          setTimeout(() => { Services.obs.removeObserver(seen, "common-dialog-loaded"); resolve(null); }, 6000);
+        });
+        // كليك بالماوس على نص العنصر: mousemove (الـ hover بيظهّر الأزرار) و mousedown و mouseup.
+        const click = async (win, el) => {
+          // Firefox بيقفل صفحة الاختيار بعد ما يفتح الـ profile.
+          if (!el || !win || win.closed) return false;
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const send = (type, buttons) => win.synthesizeMouseEvent(type, x, y, { button: 0, buttons, clickCount: type === "mousemove" ? 0 : 1 },
+            { isDOMEventSynthesized: true, isWidgetEventSynthesized: false, isAsyncEnabled: false });
+          send("mousemove", 0);
+          await wait(200);
+          // اللي فوق النقطة دي، لجوه الـ shadow roots.
+          let hit = win.document.elementFromPoint(x, y);
+          while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
+          send("mousedown", 1);
+          send("mouseup", 0);
+          return hit === el || el.contains(hit) || el.shadowRoot?.contains(hit);
+        };
+        const deleteButton = () => {
+          if (Cu.isDeadWrapper(selector)) return null;
+          const card = [...selector.shadowRoot.querySelectorAll("profile-card")].find(c => c.profile.name === "Omar");
+          return card?.shadowRoot.querySelector("#delete-button");
+        };
+        const page = gBrowser.selectedBrowser.contentWindow;
+
+        let opened = dialog();
+        const hitCancel = await click(page, deleteButton());
+        let prompt = await opened;
+        const shown = prompt && {
+          // العنوان اللي بيبان فوق (headertitle)، مش infoTitle اللي متخفي في التأكيد اللي جوه التاب.
+          title: JSON.parse(prompt.document.documentElement.getAttribute("headertitle") ?? "{}").raw,
+          body: prompt.document.getElementById("infoBody")?.textContent,
+          accept: prompt.document.querySelector("dialog").getButton("accept").label,
+          cancel: prompt.document.querySelector("dialog").getButton("cancel").label,
+          defaultButton: prompt.document.querySelector("dialog").defaultButton,
+        };
+        if (prompt) await click(prompt, prompt.document.querySelector("dialog").getButton("cancel"));
+        await wait(1000);
+        const afterCancel = (await S.getAllProfiles()).map(p => p.name);
+
+        opened = dialog();
+        const hitDelete = await click(page, deleteButton());
+        prompt = await opened;
+        // صورة: الصفحة، والتأكيد فوقها مكانه.
+        let shot = null;
+        if (prompt) {
+          await wait(500);
+          const bitmap = await gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.drawSnapshot(null, 1, "white");
+          const canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+          canvas.width = bitmap.width; canvas.height = bitmap.height;
+          const c = canvas.getContext("2d");
+          c.drawImage(bitmap, 0, 0);
+          c.fillStyle = "rgb(0 0 0 / 45%)"; c.fillRect(0, 0, canvas.width, canvas.height);
+          const box = prompt.browsingContext.embedderElement.getBoundingClientRect();
+          const area = gBrowser.selectedBrowser.getBoundingClientRect();
+          const dlg = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+          dlg.width = box.width; dlg.height = box.height;
+          dlg.getContext("2d").drawWindow(prompt, 0, 0, box.width, box.height, "white");
+          c.drawImage(dlg, box.left - area.left, box.top - area.top);
+          shot = canvas.toDataURL("image/png");
+          await click(prompt, prompt.document.querySelector("dialog").getButton("accept"));
+        }
+        let profiles = [];
+        for (let i = 0; i < 40; i++) {
+          await wait(250);
+          profiles = (await S.getAllProfiles()).map(p => p.name);
+          if (!profiles.includes("Omar")) break;
+        }
+        await wait(800);
+        return JSON.stringify({
+          hitCancel, hitDelete, shown, afterCancel, profiles, launched, shot,
+          dirExists: await IOUtils.exists(dir),
+          avatarExists: avatar ? await IOUtils.exists(avatar) : null,
+          cards: Cu.isDeadWrapper(selector) ? [] : [...selector.shadowRoot.querySelectorAll("profile-card")].map(c => c.profile.name),
+          pickerOpen: !tab.closing && gBrowser.tabs.includes(tab),
+          tabs: gBrowser.tabs.map(t => t.linkedBrowser.currentURI.spec),
+        });
+      } finally {
+        S.execProcess = exec;
+      }
+    })()`)
+  );
+  if (removal.shot) writeFileSync(join(args.out, 'profiles-delete.png'), Buffer.from(removal.shot.slice(removal.shot.indexOf(',') + 1), 'base64'));
+  delete removal.shot;
+  check('the delete button on a profile card takes the click', removal.hitCancel && removal.hitDelete, { hitCancel: removal.hitCancel, hitDelete: removal.hitDelete });
+  check('deleting asks first, in Firefox\'s words, with Cancel as the default',
+    /Delete .Omar. profile\?/.test(removal.shown?.title ?? '') && /permanently delete/.test(removal.shown?.body ?? '') &&
+      removal.shown?.accept === 'Delete' && removal.shown?.defaultButton === 'cancel', removal.shown);
+  check('Cancel keeps the profile', removal.afterCancel.includes('Omar'), removal.afterCancel);
+  check('Delete deletes the profile: database, folder and picture', !removal.profiles.includes('Omar') && !removal.dirExists && removal.avatarExists !== true,
+    { profiles: removal.profiles, dirExists: removal.dirExists, avatarExists: removal.avatarExists });
+  check('deleting does not open the profile', removal.launched.length === 0 && removal.tabs.every((u) => u !== 'about:deleteprofile'),
+    { launched: removal.launched, tabs: removal.tabs });
+  check('the picker stays open without the deleted card', removal.pickerOpen && removal.cards.length === 1 && !removal.cards.includes('Omar'), removal.cards);
 } catch (e) {
   console.error(e);
   code = 1;

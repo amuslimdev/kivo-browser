@@ -1,0 +1,62 @@
+/* panel بتاع Kivo (sidebar-web.html، chatbot أو موقع): نفس شكل chat.css بتاع Firefox، والهيدر فيه اللوجو والاسم. */
+
+body {
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  margin: 0;
+  position: absolute;
+}
+
+#header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
+  background-color: var(--sidebar-background-color);
+  color: var(--sidebar-text-color);
+  border-bottom: 1px solid var(--border-color);
+  padding-inline: var(--space-large) var(--space-small);
+  padding-block: var(--space-xsmall);
+
+  ::part(button) {
+    margin: 0;
+  }
+}
+
+#icon {
+  width: 16px;
+  height: 16px;
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+
+#title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--font-weight-heading, 600);
+}
+
+/* من غير launcher (horizontal tabs، "hide-launcher")، قايمة الـ panels مكان الاسم، زي sidebar-panel-header.css. */
+@media -moz-pref("sidebar.visibility", "hide-launcher") {
+  #icon,
+  #title {
+    display: none;
+  }
+}
+
+#missing {
+  margin: var(--space-large);
+}
+
+#browser-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+browser {
+  flex: 1;
+}

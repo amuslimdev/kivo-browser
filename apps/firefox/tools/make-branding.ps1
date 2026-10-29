@@ -6,14 +6,14 @@
     فالـ sync مش محتاج الأيقونة الأصلية. كل صورة بتتعمل من جديد بنفس مقاسها، ومفيش صورة من Firefox بتفضل
     (trademark). ملفات الماك بتتشال لأنها مش بتستخدم على Windows.
 .PARAMETER Icon
-    الأيقونة الأصلية، PNG شفاف مربع. الافتراضي الـ kite اللي اتعتمد في 19 أكتوبر
-    (docs/art/app-icon/exploration-concepts/kivo-kite-v2.png: compact body for taskbar sizes).
+    Transparent square PNG. Defaults to the upright, narrower kite approved on
+    2026-10-28; its editable SVG sits beside the PNG master.
 #>
 param([string] $Icon)
 . "$PSScriptRoot\common.ps1"
 Add-Type -AssemblyName System.Drawing
 
-if (-not $Icon) { $Icon = Join-Path $Repo 'docs\art\app-icon\exploration-concepts\kivo-kite-v2.png' }
+if (-not $Icon) { $Icon = Join-Path $Repo 'docs\art\app-icon\2026-10-28\04-kite-front.png' }
 $unofficial = Join-Path $Source 'browser\branding\unofficial'
 $target = Join-Path $FirefoxApp 'branding\kivo'
 if (-not (Test-Path $unofficial)) { throw "Firefox source not synced: $unofficial" }
@@ -24,31 +24,6 @@ $IcoSizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256)
 $master = [System.Drawing.Bitmap]::new($Icon)
 $utf8 = [Text.UTF8Encoding]::new($false)
 
-# الأيقونات الصغيرة (48 وأقل: الـ taskbar، والتابات، وقوايم Windows) بترسم kite مبسّط بدل ما تصغّر الأصل: من غير ديل،
-# مالي المربع، وأربع ألوان flat بتباين عالي، عشان الـ gradient والديل بيبقوا دوشة في 24. اتعتمد في 22 أكتوبر
-# (نسخة A، docs/art/app-icon/kivo-kite-small.svg). النقط على شبكة 48: شمال، فوق، يمين، تحت، ونقطة تقاطع العيدان.
-$SmallMax = 48
-$SmallKite = @{ L = 0.5, 18; T = 30, 0.5; R = 47.5, 27; B = 17, 47.5; C = 23.9, 22.5 }
-$SmallFaces = @(
-    @('L', 'T', '#34D7A4'),
-    @('T', 'R', '#3CC8F8'),
-    @('R', 'B', '#2B93F2'),
-    @('B', 'L', '#1A44D8'))
-
-function Draw-SmallKite([System.Drawing.Graphics] $Graphics, [int] $Size) {
-    $scale = $Size / 48.0
-    $point = { param($k) [System.Drawing.PointF]::new($SmallKite[$k][0] * $scale, $SmallKite[$k][1] * $scale) }
-    # الشكل كله الأول بلون من الوشوش، عشان حواف الوشوش اللي جنب بعض ماتسيبش خط شفاف بينهم.
-    $under = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#2B93F2'))
-    $Graphics.FillPolygon($under, [System.Drawing.PointF[]]@((& $point 'L'), (& $point 'T'), (& $point 'R'), (& $point 'B')))
-    $under.Dispose()
-    foreach ($face in $SmallFaces) {
-        $brush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml($face[2]))
-        $Graphics.FillPolygon($brush, [System.Drawing.PointF[]]@((& $point $face[0]), (& $point $face[1]), (& $point 'C')))
-        $brush.Dispose()
-    }
-}
-
 function New-Picture([int] $Width, [int] $Height, [double] $Fill, [System.Drawing.Color] $Background) {
     $bitmap = [System.Drawing.Bitmap]::new($Width, $Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
@@ -58,11 +33,8 @@ function New-Picture([int] $Width, [int] $Height, [double] $Fill, [System.Drawin
         $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
         $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-        if ($Width -eq $Height -and $Width -le $SmallMax -and $Fill -eq 1.0) { Draw-SmallKite $graphics $Width }
-        else {
-            $mark = [int][Math]::Round([Math]::Min($Width, $Height) * $Fill)
-            $graphics.DrawImage($master, [System.Drawing.Rectangle]::new([int](($Width - $mark) / 2), [int](($Height - $mark) / 2), $mark, $mark))
-        }
+        $mark = [int][Math]::Round([Math]::Min($Width, $Height) * $Fill)
+        $graphics.DrawImage($master, [System.Drawing.Rectangle]::new([int](($Width - $mark) / 2), [int](($Height - $mark) / 2), $mark, $mark))
     }
     finally { $graphics.Dispose() }
     return $bitmap
@@ -103,6 +75,8 @@ function Set-Text([string] $Path, [scriptblock] $Transform) {
 }
 
 try {
+    $expected = [IO.Path]::GetFullPath((Join-Path $Repo 'apps\firefox\branding\kivo'))
+    if ([IO.Path]::GetFullPath($target) -ne $expected) { throw "Unexpected branding target: $target" }
     if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     Copy-Item $unofficial $target -Recurse
 
@@ -203,6 +177,23 @@ pref("browser.shell.checkDefaultBrowser", false);
 // The sidebar tools. Firefox's default is empty and it only fills the list for people who never used the new
 // sidebar, so a profile that had Kivo's old list (before Synced tabs came back) was left with no icons at all.
 pref("sidebar.main.tools", "opentabs,bookmarks,aichat,history,syncedtabs");
+
+// Find in page (Ctrl+F) like Chrome (kivo/findbar.css): every match in yellow and the current one in orange,
+// instead of Firefox's pink and green. "Highlight All" starts on, like Chrome (it is under the box's options button).
+pref("findbar.highlightAll", true);
+pref("ui.textHighlightBackground", "#ffff00");
+pref("ui.textHighlightForeground", "#000000");
+pref("ui.textSelectAttentionBackground", "#ff9632");
+pref("ui.textSelectAttentionForeground", "#000000");
+
+// One color picker everywhere (kivo/KivoColorPicker.sys.mjs): every <input type="color"> (Kivo Home, websites, Firefox
+// pages) opens Kivo's picker in a menu, with an eyedropper and a box that takes any CSS color, instead of the Windows
+// dialog. This is Firefox's in-page color picker (on in Nightly only), and Kivo shows its own picker inside it.
+pref("dom.forms.html_color_picker.enabled", true);
+
+// Kivo writes the taskbar Jump Lists (kivo/KivoTaskbar.sys.mjs, through Kivo.exe): one per profile button, with its
+// workspaces. Firefox's writes only the main button's list, and its items started the engine without Kivo's identity.
+pref("browser.taskbar.lists.enabled", false);
 
 // Kivo updates itself from its public releases (KivoShell.sys.mjs, tools/release.ps1); Kivo.exe installs only
 // builds signed with Kivo's release key.

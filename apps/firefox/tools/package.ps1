@@ -41,16 +41,26 @@ $built = Get-Content (Join-Path $app 'application.ini')
 function Get-IniValue([string] $name) {
     ($built | Where-Object { $_ -match "^$name=" } | Select-Object -First 1) -replace "^$name=", ''
 }
+# المحرك (xul.dll) جاي جاهز من Mozilla للنسخة اللي اتبنت فعلًا، والـ application.ini من الكود. لو الكود على "version bump"
+# لنسخة لسه مانزلتش، المحرك بيرفض الهوية برسالة خطأ على الشاشة ومابيفتحش (29 أكتوبر 2026: هوية 159.0.1 على محرك 159.0).
+$engine = (Get-Item (Join-Path $app 'xul.dll')).VersionInfo.ProductVersion
+if ($engine -ne (Get-IniValue 'MaxVersion')) {
+    throw "The engine is Gecko $engine but the source says $(Get-IniValue 'MaxVersion'). Lock firefox.lock on a release tag (sync.ps1 -Update)."
+}
 # BuildID جديد لكل package: الـ artifact build بيدّي نفس الـ BuildID كل مرة، و Firefox مابيمسحش الـ startup cache
 # (السكريبتات المتخزنة في الـ profile) غير لما النسخة أو الـ BuildID يتغيروا، فبعد التثبيت كان بيشغّل الكود القديم.
 # بالتوقيت (UTC)، فكل نسخة أكبر من اللي قبلها ومفيش "downgrade".
 $buildId = (Get-Date).ToUniversalTime().ToString('yyyyMMddHHmmss')
+# UAName: الـ user agent بيتبني من Name لو مفيش UAName (nsHttpHandler)، فكان "Gecko/20100101 Kivo/158.0.1" من غير
+# Firefox خالص، وجوجل كان بيبعت نسخته البسيطة القديمة. Kivo للمواقع Firefox بالظبط.
 $identity = @"
 ; Kivo's identity (apps/firefox/tools/package.ps1). Kivo.exe starts kivo-browser.exe with -app <this file>.
 ; Data lives in %APPDATA%\Kivo, policies in Software\Policies\Mozilla\Kivo, and nothing reports to Mozilla.
+; UAName keeps the user agent exactly Firefox's, so sites like Google don't fall back to their basic pages.
 [App]
 Vendor=Kivo
 Name=Kivo
+UAName=Firefox
 RemotingName=kivo
 Profile=Kivo
 Version=$(Get-IniValue 'Version')

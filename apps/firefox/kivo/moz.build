@@ -5,10 +5,13 @@
 JAR_MANIFESTS += ["jar.mn"]
 
 MOZ_SRC_FILES += [
+    "KivoColorPicker.sys.mjs",
     "KivoData.sys.mjs",
     "KivoProfileMenu.sys.mjs",
     "KivoProfiles.sys.mjs",
     "KivoShell.sys.mjs",
+    "KivoSidebar.sys.mjs",
+    "KivoTaskbar.sys.mjs",
     "KivoTheme.sys.mjs",
     "KivoWorkspaces.sys.mjs",
 ]

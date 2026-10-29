@@ -1,8 +1,8 @@
 diff --git a/browser/components/moz.build b/browser/components/moz.build
-index 8a1611d5d1..7f351dd0c0 100644
+index 9a955225780..ba881efa47d 100644
 --- a/browser/components/moz.build
 +++ b/browser/components/moz.build
-@@ -44,6 +44,7 @@ DIRS += [
+@@ -41,6 +41,7 @@ DIRS += [
      "firefoxview",
      "genai",
      "ipprotection",

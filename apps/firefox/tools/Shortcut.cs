@@ -1,6 +1,7 @@
 // A .lnk with System.AppUserModel.ID, so Windows groups Kivo's windows under its Start menu shortcut and
 // a pinned taskbar icon starts Kivo.exe (with Kivo's identity), not the engine. install.ps1 loads it with
-// Add-Type, so it is C# 5 for Windows PowerShell. Kept ASCII.
+// Add-Type, so it is C# 5 for Windows PowerShell. Kept ASCII. Kivo.exe is built with it too: JumpList.cs
+// makes its Jump List items with the same COM types.
 using System;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
@@ -8,10 +9,10 @@ using System.Runtime.InteropServices.ComTypes;
 public static class KivoShortcut
 {
     [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
-    class ShellLink { }
+    internal class ShellLink { }
 
     [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
-    interface IShellLinkW
+    internal interface IShellLinkW
     {
         void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder file, int max, IntPtr data, uint flags);
         void GetIDList(out IntPtr list);
@@ -34,14 +35,14 @@ public static class KivoShortcut
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    struct PropertyKey
+    internal struct PropertyKey
     {
         public Guid FormatId;
         public uint PropertyId;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    struct PropVariant
+    internal struct PropVariant
     {
         public ushort Type;
         public ushort Reserved1;
@@ -52,7 +53,7 @@ public static class KivoShortcut
     }
 
     [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
-    interface IPropertyStore
+    internal interface IPropertyStore
     {
         void GetCount(out uint count);
         void GetAt(uint index, out PropertyKey key);
@@ -62,6 +63,7 @@ public static class KivoShortcut
     }
 
     const ushort VT_LPWSTR = 31;
+    internal static readonly Guid AppUserModel = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
 
     /// <summary>Writes the shortcut, replacing any file at <paramref name="lnk"/>.</summary>
     public static void Create(string lnk, string target, string workingDirectory, string description, string appUserModelId)
@@ -72,10 +74,17 @@ public static class KivoShortcut
         link.SetDescription(description);
         link.SetIconLocation(target, 0);
 
-        var store = (IPropertyStore)link;
         // PKEY_AppUserModel_ID
-        var key = new PropertyKey { FormatId = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), PropertyId = 5 };
-        var value = new PropVariant { Type = VT_LPWSTR, Value = Marshal.StringToCoTaskMemUni(appUserModelId) };
+        SetString((IPropertyStore)link, AppUserModel, 5, appUserModelId);
+
+        ((IPersistFile)link).Save(lnk, true);
+    }
+
+    /// <summary>Sets one string property and commits it.</summary>
+    internal static void SetString(IPropertyStore store, Guid format, uint id, string text)
+    {
+        var key = new PropertyKey { FormatId = format, PropertyId = id };
+        var value = new PropVariant { Type = VT_LPWSTR, Value = Marshal.StringToCoTaskMemUni(text) };
         try
         {
             store.SetValue(ref key, ref value);
@@ -85,7 +94,5 @@ public static class KivoShortcut
         {
             Marshal.FreeCoTaskMem(value.Value);
         }
-
-        ((IPersistFile)link).Save(lnk, true);
     }
 }

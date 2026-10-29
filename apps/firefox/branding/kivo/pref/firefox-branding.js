@@ -75,6 +75,23 @@ pref("browser.shell.checkDefaultBrowser", false);
 // sidebar, so a profile that had Kivo's old list (before Synced tabs came back) was left with no icons at all.
 pref("sidebar.main.tools", "opentabs,bookmarks,aichat,history,syncedtabs");
 
+// Find in page (Ctrl+F) like Chrome (kivo/findbar.css): every match in yellow and the current one in orange,
+// instead of Firefox's pink and green. "Highlight All" starts on, like Chrome (it is under the box's options button).
+pref("findbar.highlightAll", true);
+pref("ui.textHighlightBackground", "#ffff00");
+pref("ui.textHighlightForeground", "#000000");
+pref("ui.textSelectAttentionBackground", "#ff9632");
+pref("ui.textSelectAttentionForeground", "#000000");
+
+// One color picker everywhere (kivo/KivoColorPicker.sys.mjs): every <input type="color"> (Kivo Home, websites, Firefox
+// pages) opens Kivo's picker in a menu, with an eyedropper and a box that takes any CSS color, instead of the Windows
+// dialog. This is Firefox's in-page color picker (on in Nightly only), and Kivo shows its own picker inside it.
+pref("dom.forms.html_color_picker.enabled", true);
+
+// Kivo writes the taskbar Jump Lists (kivo/KivoTaskbar.sys.mjs, through Kivo.exe): one per profile button, with its
+// workspaces. Firefox's writes only the main button's list, and its items started the engine without Kivo's identity.
+pref("browser.taskbar.lists.enabled", false);
+
 // Kivo updates itself from its public releases (KivoShell.sys.mjs, tools/release.ps1); Kivo.exe installs only
 // builds signed with Kivo's release key.
 pref("kivo.update.url", "https://github.com/amuslimdev/kivo-browser/releases/latest/download/update.json");

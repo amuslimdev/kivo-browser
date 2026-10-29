@@ -1,0 +1,42 @@
+<!-- chatbot زيادة أو أي موقع في الـ sidebar (KivoSidebar.sys.mjs): sidebar-web.html?tool=<kivochat-… أو kivosite-…>. -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src resource: chrome:; object-src 'none'; img-src data: chrome:;"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Kivo</title>
+    <link rel="localization" href="browser/sidebar.ftl" />
+    <link rel="stylesheet" href="chrome://global/skin/in-content/common.css" />
+    <link rel="stylesheet" href="chrome://browser/content/sidebar/sidebar.css" />
+    <link rel="stylesheet" href="chrome://browser/content/kivo/sidebar-web.css" />
+    <script src="chrome://browser/content/contentTheme.js"></script>
+    <script type="module" src="chrome://browser/content/sidebar/sidebar-panel-switcher.mjs"></script>
+    <script type="module" src="chrome://browser/content/kivo/sidebar-web.mjs"></script>
+  </head>
+  <body>
+    <div id="header">
+      <img id="icon" alt="" />
+      <h4 id="title" class="text-truncated-ellipsis"></h4>
+      <sidebar-panel-switcher id="switcher"></sidebar-panel-switcher>
+      <moz-button
+        id="reload"
+        type="icon ghost"
+        iconsrc="chrome://global/skin/icons/reload.svg"
+        title="Reload"
+        aria-label="Reload"
+      ></moz-button>
+      <moz-button
+        id="close"
+        type="icon ghost"
+        iconsrc="chrome://global/skin/icons/close.svg"
+        data-l10n-id="sidebar-panel-header-close-button"
+      ></moz-button>
+    </div>
+    <p id="missing" hidden>This tool is not in your sidebar anymore. Add it again from Customize sidebar.</p>
+    <div id="browser-container"></div>
+  </body>
+</html>

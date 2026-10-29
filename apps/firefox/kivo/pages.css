@@ -9,6 +9,10 @@
   --color-accent-primary: var(--kivo-accent);
   --color-accent-primary-hover: color-mix(in srgb, var(--kivo-accent) 88%, black);
   --color-accent-primary-active: color-mix(in srgb, var(--kivo-accent) 78%, black);
+  /* اللينكات بنسخة واضحة من اللون، زي kivo.css. */
+  --link-color: var(--kivo-accent-ink);
+  --link-color-hover: var(--kivo-accent-ink);
+  --link-color-active: var(--kivo-accent-ink);
   --button-text-color-primary: var(--kivo-on-accent);
   --button-text-color-primary-hover: var(--kivo-on-accent);
   --button-text-color-primary-active: var(--kivo-on-accent);

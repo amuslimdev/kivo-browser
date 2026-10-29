@@ -1,0 +1,39 @@
+diff --git a/browser/components/profiles/SelectableProfileService.sys.mjs b/browser/components/profiles/SelectableProfileService.sys.mjs
+index e3ffff744b3..0028bc0f9ba 100644
+--- a/browser/components/profiles/SelectableProfileService.sys.mjs
++++ b/browser/components/profiles/SelectableProfileService.sys.mjs
+@@ -28,6 +28,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
+   DownloadPaths: "resource://gre/modules/DownloadPaths.sys.mjs",
+   EveryWindow: "resource:///modules/EveryWindow.sys.mjs",
+   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
++  KivoTaskbar: "moz-src:///browser/components/kivo/KivoTaskbar.sys.mjs",
+   MigrationUtils:
+     "moz-src:///browser/components/migration/MigrationUtils.sys.mjs",
+   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+@@ -474,6 +475,14 @@ class SelectableProfileServiceClass extends EventEmitter {
+       iconController = TASKBAR_ICON_CONTROLLERS.get(win);
+     }
+ 
++    if (Services.appinfo.name === "Kivo") {
++      iconController?.setOverlayIcon(null, null);
++      lazy.KivoTaskbar.setProfile(win, this.#currentProfile).catch(error =>
++        console.error("Kivo taskbar:", error)
++      );
++      return;
++    }
++
+     if (this.#currentProfile.hasCustomAvatar) {
+       iconController?.setOverlayIcon(
+         this.#badge.image,
+@@ -967,6 +976,11 @@ class SelectableProfileServiceClass extends EventEmitter {
+           for (let win of lazy.EveryWindow.readyWindows) {
+             let iconController = TASKBAR_ICON_CONTROLLERS.get(win);
+             iconController?.setOverlayIcon(null, null);
++            if (Services.appinfo.name === "Kivo") {
++              lazy.KivoTaskbar.setProfile(win, null).catch(error =>
++                console.error("Kivo taskbar:", error)
++              );
++            }
+           }
+         }
+       }

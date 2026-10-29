@@ -2,7 +2,7 @@
 .SYNOPSIS
     بيحدّث Kivo لآخر Firefox (مرحلة "Kivo يومي" في docs/FIREFOX.md، لحد التحديث التلقائي في G6).
 .DESCRIPTION
-    بيسأل Mozilla عن آخر Firefox، ولو أحدث من firefox.lock: sync.ps1 -Update (آخر revision في الفرع، والـ patches)،
+    بيسأل Mozilla عن آخر Firefox، ولو أحدث من firefox.lock: sync.ps1 -Update (الـ tag بتاع النسخة دي، والـ patches)،
     و mach build، و package.ps1، و install.ps1. Kivo نفسه بيقول لما فيه نسخة أحدث (KivoShell.sys.mjs).
     لو Firefox نزّل نسخة كبيرة (159 مثلًا) والـ patches مابقتش بتركب، sync بيقف ويقول أنهي patch.
 .PARAMETER Check
@@ -27,7 +27,7 @@ if ($Check) { return }
 & (Join-Path $PSScriptRoot 'sync.ps1') -Update -NoBootstrap
 $updated = (Get-Content (Join-Path $FirefoxApp 'firefox.lock') -Raw | ConvertFrom-Json).version
 if ([version]$updated -lt [version]$latest) {
-    throw "The release branch is still on Firefox $updated. Try again in a few hours."
+    throw "firefox.lock is still on Firefox $updated (expected $latest)."
 }
 Invoke-Mach build
 & (Join-Path $PSScriptRoot 'package.ps1')

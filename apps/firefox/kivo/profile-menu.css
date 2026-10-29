@@ -317,9 +317,9 @@
 
 .kivo-pm-add {
   justify-content: center;
-  border: 1.5px dashed color-mix(in srgb, var(--kivo-accent, AccentColor) 55%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--kivo-accent-ink, AccentColor) 45%, transparent);
   background: none;
-  color: var(--kivo-accent, AccentColor) !important;
+  color: var(--kivo-accent-ink, AccentColor) !important;
   font-weight: 600 !important;
 
   &::before {

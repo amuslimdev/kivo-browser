@@ -116,6 +116,30 @@ export function inkOn(hex) {
   return Math.abs(apca(WHITE, hex)) >= Math.abs(apca(DARK, hex)) ? WHITE : DARK;
 }
 
+// خلفية القوايم في Firefox (--arrowpanel-background) في الفاتح والغامق.
+const PANEL_LIGHT = "#ffffff";
+const PANEL_DARK = "#42414d";
+
+/**
+ * نسخة من اللون تتقري ككلام صغير على الخلفية دي (Lc 72 في APCA، لخط 13px بوزن 600): بتغمق على الفاتح وبتفتح على
+ * الغامق، فلون workspace فاتح أوي (أو غامق أوي) مابيختفيش. اللون الواضح أصلًا بيفضل زي ما هو.
+ */
+export function readableOn(accent, bg) {
+  const toward = luminance(bg) > 0.4 ? 0x00 : 0xff;
+  for (let amount = 1; amount > 0; amount -= 0.05) {
+    const color = mix(accent, toward, amount);
+    if (Math.abs(apca(color, bg)) >= 72) {
+      return color;
+    }
+  }
+  return toward ? WHITE : DARK;
+}
+
+/** لون الـ accent ككلام في القوايم: light-dark() بيختار على حسب شكل القايمة نفسها. */
+function accentInk(accent) {
+  return `light-dark(${readableOn(accent, PANEL_LIGHT)}, ${readableOn(accent, PANEL_DARK)})`;
+}
+
 /** شريط التابات وشريط الأدوات من لون الـ profile والوضع، زي ShellWindow.ApplyChrome و chromeColors. */
 export function chromeColors(theme, dark) {
   const tabs = dark ? mix(theme.accent, 0x14, 0.36) : mix(theme.accent, 0xff, 0.32);
@@ -171,6 +195,7 @@ function apply(window) {
   root.setAttribute("kivo-mode", colors.dark ? "dark" : "light");
   root.setAttribute("kivo-corners", theme.corners);
   root.style.setProperty("--kivo-accent", theme.accent);
+  root.style.setProperty("--kivo-accent-ink", accentInk(theme.accent));
   root.style.setProperty("--kivo-on-accent", colors.onAccent);
   root.style.setProperty("--kivo-tabs", colors.tabs);
   root.style.setProperty("--kivo-tabs-ink", colors.tabsInk);
@@ -239,11 +264,13 @@ function guardFirefoxTheme() {
 
 // ---------- صفحات Firefox جوه Kivo (G5) ----------
 // الإعدادات والـ sidebars بخط Kivo ولونه واستدارته (pages.css). اللون بتاع الـ workspace لو الصفحة في نافذتها.
+// ومعاهم Customize sidebar والـ panels بتاعة Kivo (chatbots ومواقع، KivoSidebar).
 
 const PAGES_SHEET = "chrome://browser/content/kivo/pages.css";
 const STYLED_PAGES = [
   /^about:preferences/,
-  /^chrome:\/\/browser\/content\/sidebar\/sidebar-(history|bookmarks)\.html/,
+  /^chrome:\/\/browser\/content\/sidebar\/sidebar-(history|bookmarks|customize)\.html/,
+  /^chrome:\/\/browser\/content\/kivo\/sidebar-web\.html/,
   /^chrome:\/\/browser\/content\/places\/(history|bookmarks)Sidebar\.xhtml/,
 ];
 const RADIUS = { soft: 6, round: 10, bubbly: 14 };
@@ -262,6 +289,7 @@ function stylePage(doc) {
     const accent = (HEX.test(chrome?.kivoWorkspaceColor ?? "") && chrome.kivoWorkspaceColor) || theme.accent;
     const root = doc.documentElement;
     root.style.setProperty("--kivo-accent", accent);
+    root.style.setProperty("--kivo-accent-ink", accentInk(accent));
     root.style.setProperty("--kivo-on-accent", inkOn(accent));
     root.style.setProperty("--kivo-font", FONTS.get(theme.font));
     root.style.setProperty("--kivo-radius", `${RADIUS[theme.corners]}px`);

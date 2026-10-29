@@ -1,0 +1,4 @@
+# Firefox بيتبني بأدوات Unix: git apply للـ patches، و bash للـ mozconfig و configure.sh. فالملفات LF حتى في
+# checkout على Windows، لأن GitHub Actions (و Git for Windows عمومًا) بيبدأ بـ core.autocrlf=true، والـ patches
+# بـ CRLF مابتتطبقش على كود Firefox (29 أكتوبر 2026، run 40884167323).
+* text=auto eol=lf

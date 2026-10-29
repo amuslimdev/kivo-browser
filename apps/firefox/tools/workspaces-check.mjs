@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // الـ workspaces (G4) على Kivo، headless وبـ profile بيفضل بين تشغيلتين: الزرار في أول شريط التابات، وworkspace
 // جديدة في نافذة لوحدها، وتاباتها بتتحفظ في workspaces.json، وبترجع لما نافذتها تتقفل وتتفتح، وبعد ما Kivo يتقفل
-// ويتفتح. ولون الـ workspace هو هيدر نافذتها، والهيدر الثابت في الثيم مابيتغيرش مع العوالم. والصور: القايمة،
-// والتعديل، ونافذة workspace.
+// ويتفتح. ولون الـ workspace هو هيدر نافذتها، والهيدر الثابت في الثيم مابيتغيرش مع العوالم. والملف بيرجع من
+// الـ .bak لو الجهاز قفل وهو بيتكتب. والصور: القايمة، والتعديل، ونافذة workspace.
 //
 // node apps/firefox/tools/workspaces-check.mjs --kivo <Kivo.exe> --out <فولدر>
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -144,13 +144,13 @@ try {
     const hiddenAtFirst = panel.querySelector(".kivo-ws-picker").hidden;
     panel.querySelector(".kivo-ws-more").click();
     const shown = !panel.querySelector(".kivo-ws-picker").hidden;
-    const hex = panel.querySelector(".kivo-ws-hex");
+    const hex = panel.querySelector(".kivo-picker-code");
     hex.value = "5b3fd1";
     hex.dispatchEvent(new Event("input", { bubbles: true }));
     const typed = form.dataset.color;
     const schoolWin = [...BrowserWindowTracker.orderedWindows].find(w => w.kivoWorkspaceId === ${JSON.stringify(school.id)});
     const previewTop = schoolWin.document.documentElement.style.getPropertyValue("--kivo-tabs").trim();
-    const hue = panel.querySelector(".kivo-ws-hue");
+    const hue = panel.querySelector(".kivo-picker-hue");
     hue.value = "300";
     hue.dispatchEvent(new Event("input", { bubbles: true }));
     const picked = form.dataset.color;
@@ -257,6 +257,86 @@ try {
   check('deleting a workspace keeps its window as a normal one', removed.list.join() === 'School' && removed.windowStays && removed.untagged, removed);
   check("and its window goes back to the theme's top bar", removed.before === '#e0499a' && removed.after !== '#e0499a', [removed.before, removed.after]);
   await kivo.quit();
+
+  // ---------- الجهاز قفل فجأة (25 أكتوبر) ----------
+  // الملف بيرجع أصفار لو الكتابة مالحقتش توصل الهارد. Kivo بيقرا النسخة اللي قبله (.bak)، ولو هي كمان بايظة
+  // بيسيب نسخة من الملف قبل ما يكتب فوقه.
+  const dir = join(profile, 'kivo');
+  const main = join(dir, 'workspaces.json');
+  const saved = readFileSync(main, 'utf8');
+  check('the saved file leaves out recently closed tabs', !saved.includes('"_closedTabs"'), saved.length);
+  const backup = JSON.parse(readFileSync(`${main}.bak`, 'utf8'));
+  check('the previous file is kept as workspaces.json.bak', backup.workspaces.some((w) => w.name === 'School'), backup.workspaces.map((w) => w.name));
+  writeFileSync(main, Buffer.alloc(saved.length));
+  kivo = await launch(args.kivo, {}, { profile });
+  run = runIn(kivo);
+  await sleep(6000);
+  const rescued = await run(`return (await W.list()).map(w => w.name);`);
+  check('after a crash that zeroed the file, the workspaces come back from the .bak', rescued.includes('School'), rescued);
+  await kivo.quit();
+
+  writeFileSync(main, Buffer.alloc(64));
+  writeFileSync(`${main}.bak`, Buffer.alloc(64));
+  kivo = await launch(args.kivo, {}, { profile });
+  run = runIn(kivo);
+  await sleep(4000);
+  const lost = await run(`return (await W.list()).length;`);
+  const broken = existsSync(join(dir, 'workspaces.broken.json')) ? readFileSync(join(dir, 'workspaces.broken.json')) : null;
+  check('with both files broken, Kivo starts empty but keeps a copy of the broken file', lost === 0 && broken?.length === 64, [lost, broken?.length]);
+  await kivo.quit();
+
+  // ---------- crash وملفات Firefox نفسه باظت ----------
+  // Firefox بيرجع لآخر قفلة عادية (previous.jsonlz4)، ونافذة الـ workspace فيها بتابات أقدم من workspaces.json.
+  const crashProfile = mkdtempSync(join(tmpdir(), 'kivo-workspaces-crash-'));
+  kivo = await launch(args.kivo, {}, { profile: crashProfile });
+  run = runIn(kivo);
+  await sleep(2000);
+  const work = await run(`
+    const win = await W.create({ name: "Work" });
+    win.gBrowser.addTrustedTab(${JSON.stringify(ONE)});
+    await wait(2500);
+    await W.saveNow();
+    return win.kivoWorkspaceId;`);
+  await kivo.quit();
+
+  kivo = await launch(args.kivo, {}, { profile: crashProfile });
+  run = runIn(kivo);
+  await sleep(6000);
+  const older = await run(`
+    const win = [...BrowserWindowTracker.orderedWindows].find(w => w.kivoWorkspaceId === ${JSON.stringify(work)});
+    win.gBrowser.addTrustedTab(${JSON.stringify(TWO)});
+    await wait(2500);
+    await W.saveNow();
+    // Firefox بينقل الـ session النضيف لـ previous.jsonlz4 مع أول كتابة بعد البداية (كل 15 ثانية).
+    const path = PathUtils.join(PathUtils.profileDir, "sessionstore-backups", "previous.jsonlz4");
+    for (let i = 0; i < 60 && !(await IOUtils.exists(path)); i++) await wait(500);
+    const previous = await IOUtils.readJSON(path, { decompress: true });
+    const old = previous.windows.find(w => w.extData?.["kivo-workspace"] === ${JSON.stringify(work)});
+    return old?.tabs.map(t => t.entries[t.index - 1]?.url) ?? null;`);
+  check('the older Firefox session has the workspace with one tab less', older?.includes(ONE) && !older.includes(TWO), older);
+  await kivo.quit();
+
+  // الجهاز قفل: مفيش ملف session نضيف، والـ recovery أصفار، و Crash Monitor ماشافش القفلة. والـ remote agent
+  // بيقفل ترجيع الـ session بعد crash (resume_from_crash في الـ prefs اللي بيحطها)، فمن غيرها زي الاستخدام العادي.
+  rmSync(join(crashProfile, 'sessionstore.jsonlz4'), { force: true });
+  writeFileSync(join(crashProfile, 'sessionstore-backups', 'recovery.jsonlz4'), Buffer.alloc(4096));
+  writeFileSync(join(crashProfile, 'sessionCheckpoints.json'), '{"profile-after-change":true}');
+  kivo = await launch(args.kivo, { 'remote.prefs.recommended': false }, { profile: crashProfile });
+  run = runIn(kivo);
+  await sleep(6000);
+  const after = await run(`
+    const { SessionStartup } = ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStartup.sys.mjs");
+    const all = [...BrowserWindowTracker.orderedWindows];
+    const wins = all.filter(w => w.kivoWorkspaceId === ${JSON.stringify(work)});
+    return { crashed: SessionStartup.previousSessionCrashed, all: all.length, windows: wins.length, urls: wins[0] ? await urls(wins[0]) : null };`);
+  // نافذتين: الـ workspace والنافذة العادية اللي Firefox رجّعهم، من غير نسخة تانية من الـ workspace.
+  check(
+    'after a crash that sent Firefox back to an older session, the workspace opens with its newer tabs',
+    after.crashed && after.all === 2 && after.windows === 1 && after.urls?.includes(ONE) && after.urls?.includes(TWO),
+    after
+  );
+  await kivo.quit();
+  rmSync(crashProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 } catch (e) {
   console.error(e);
   code = 1;

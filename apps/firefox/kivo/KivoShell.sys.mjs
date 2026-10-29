@@ -7,6 +7,7 @@
 // - التحميلات والسجل (G5): Ctrl+J والأيقونة بيفتحوا القايمة الصغيرة تحت السهم زي Edge، و "Show all downloads"
 //   و "Show all history" بيفتحوا صفحات Kivo (web/ui) في تاب بدل نافذة المكتبة القديمة.
 // - التحديثات (G6): Kivo بينزّل النسخة الجديدة من الـ release في الخلفية، و Kivo.exe بيركّبها وهو بيفتح (تحت).
+// - زي Chrome: Ctrl+Shift+N للنافذة الخاصة، والبحث في الصفحة (Ctrl+F) صندوق صغير فوق (findbar.css).
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -96,6 +97,127 @@ function hookWindow(win) {
   win.gInitialPages.push(HOME + "history.html", HOME + "downloads.html");
   const organizer = win.PlacesCommandHook.showPlacesOrganizer.bind(win.PlacesCommandHook);
   win.PlacesCommandHook.showPlacesOrganizer = what => (what === "History" ? openKivoPage(win, "history.html") : organizer(what));
+}
+
+// ---------- زي Chrome ----------
+
+/**
+ * Ctrl+Shift+N بيفتح نافذة خاصة زي Chrome و Edge، و Ctrl+Shift+P بتاع Firefox بيرجع للمواقع (vscode.dev مثلًا).
+ * و Ctrl+Shift+N كان "Reopen closed window"، وده بيفضل في Ctrl+Shift+T زي Chrome (آخر تاب أو نافذة اتقفلت).
+ * بيحصل قبل CustomKeys (browser-window-load)، فـ about:keyboard بيعرضه على إنه الأصلي، واللي يتغيّر من هناك بيكسب.
+ */
+const KEYS = {
+  key_privatebrowsing: { key: "N", modifiers: "accel,shift" },
+  key_undoCloseWindow: {},
+};
+
+function chromeKeys(win) {
+  const keysets = new Set();
+  for (const [id, attrs] of Object.entries(KEYS)) {
+    const key = win.document.getElementById(id);
+    if (!key) {
+      continue;
+    }
+    // ومن غير data-l10n-id، عشان Fluent مايرجّعش حرف Firefox.
+    for (const attr of ["data-l10n-id", "key", "keycode", "modifiers"]) {
+      key.removeAttribute(attr);
+    }
+    for (const [attr, value] of Object.entries(attrs)) {
+      key.setAttribute(attr, value);
+    }
+    keysets.add(key.parentElement);
+  }
+  // Gecko بيقرا الـ <key> لما الـ keyset يدخل الصفحة بس، فبيتشال ويرجع (زي CustomKeys.sys.mjs).
+  for (const keyset of keysets) {
+    const parent = keyset.parentElement;
+    keyset.remove();
+    parent.append(keyset);
+  }
+}
+
+/** عدد النتايج زي Chrome: "1/5" جنب الكلمة، و "0/0" لو مش موجودة، بدل "1 of 5 matches" و "Phrase not found". */
+function showMatches(findbar, current, total) {
+  const label = findbar._foundMatches;
+  delete label.dataset.l10nId;
+  label.hidden = !findbar._findField.value;
+  label.setAttribute("value", label.hidden ? "" : `${current}/${total}`);
+}
+
+function chromeMatches(Findbar) {
+  const findbar = Findbar.prototype;
+  const updateStatus = findbar._updateStatusUI;
+  findbar._updateStatusUI = function (result, findPrevious) {
+    updateStatus.call(this, result, findPrevious);
+    if (result === Ci.nsITypeAheadFind.FIND_NOTFOUND) {
+      showMatches(this, 0, 0);
+    }
+  };
+  // total -1: أكتر من accessibility.typeaheadfind.matchesCountLimit.
+  findbar.onMatchesCountResult = function ({ current, total, limit }) {
+    showMatches(this, current ?? 0, total === -1 ? `${limit}+` : total);
+  };
+}
+
+/**
+ * اختيارات Firefox (Highlight All، و Match Case، و Match Diacritics، و Whole Words) مابتتشالش: بتتنقل لصف تاني جوه
+ * الصندوق، بيفتح ويقفل من زرار "⋯" جنب السهمين، و Kivo بيفتكره مفتوح ولا لأ (kivo.findbar.options) في كل النوافذ.
+ * ولو اختيار بيغيّر النتايج شغال والصف مقفول، الزرار عليه نقطة. نفس الـ checkboxes بتاعة Firefox (الـ prefs،
+ * والـ accesskeys، وقارئ الشاشة زي ما هما)، والشكل في findbar.css.
+ */
+const OPTIONS_PREF = "kivo.findbar.options";
+const OPTIONS = ["highlight", "find-case-sensitive", "find-match-diacritics", "find-entire-word"];
+const FILTERS = ["find-case-sensitive", "find-match-diacritics", "find-entire-word"];
+
+function showOptions(findbar) {
+  const open = Services.prefs.getBoolPref(OPTIONS_PREF, false);
+  findbar.querySelector(".kivo-find-options").hidden = !open;
+  const button = findbar.querySelector(".kivo-find-options-button");
+  button.toggleAttribute("checked", open);
+  button.setAttribute("aria-expanded", open);
+}
+
+function addOptions(findbar) {
+  const doc = findbar.ownerDocument;
+  const row = doc.createXULElement("hbox");
+  row.className = "kivo-find-options";
+  row.append(...OPTIONS.map(id => findbar.getElement(id)));
+  findbar.append(row);
+
+  // في صف الكلمة، فـ _updateFindUI بيخبّيه في Quick find زي الباقي.
+  const button = doc.createXULElement("toolbarbutton");
+  button.className = "kivo-find-options-button tabbable";
+  button.setAttribute("tooltiptext", "Find options");
+  button.setAttribute("aria-label", "Find options");
+  button.addEventListener("command", () => Services.prefs.setBoolPref(OPTIONS_PREF, !Services.prefs.getBoolPref(OPTIONS_PREF, false)));
+  findbar.getElement("findbar-container").append(button);
+
+  const filtered = () => button.toggleAttribute("kivo-filtered", FILTERS.some(id => findbar.getElement(id).checked));
+  new doc.defaultView.MutationObserver(filtered).observe(row, { attributeFilter: ["checked"], subtree: true });
+  filtered();
+  showOptions(findbar);
+}
+
+function chromeFind(win) {
+  // findbar.js بيتحمّل أول مرة findbar يتعمل، و TabFindInitialized بييجي قبل أي بحث. (whenDefined بيرفض "findbar"،
+  // لأنه اسم XUL مافيهوش "-".) والـ findbar من getCachedFindBar: tab._findBar اتشال في Firefox 159.
+  let patched = false;
+  win.addEventListener("TabFindInitialized", event => {
+    if (!patched) {
+      chromeMatches(win.customElements.get("findbar"));
+      patched = true;
+    }
+    addOptions(win.gBrowser.getCachedFindBar(event.target));
+  });
+  const sync = () => {
+    for (const tab of win.gBrowser.tabs) {
+      const findbar = win.gBrowser.getCachedFindBar(tab);
+      if (findbar) {
+        showOptions(findbar);
+      }
+    }
+  };
+  Services.prefs.addObserver(OPTIONS_PREF, sync);
+  win.addEventListener("unload", () => Services.prefs.removeObserver(OPTIONS_PREF, sync), { once: true });
 }
 
 // ---------- التحديثات (G6) ----------
@@ -314,6 +436,10 @@ export const KivoShell = {
   /** category browser-before-ui-startup. */
   init() {
     hookShellService();
+    Services.obs.addObserver(win => {
+      chromeKeys(win);
+      chromeFind(win);
+    }, "browser-window-before-show");
     Services.obs.addObserver(win => {
       hookWindow(win);
       (Services.prefs.getStringPref(URL_PREF, "") ? showReadyNotice(win) : showUpdateNotice(win)).catch(console.error);

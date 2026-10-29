@@ -3,12 +3,17 @@
 //
 // - التخزين: <profile>\kivo\workspaces.json، يعني لكل profile لوحده. حالة كل نافذة هي اللي الـ session store بتاع
 //   Firefox بيجمعها (getWindowState)، وبتتحفظ لما Firefox يكتب الـ session ولما النافذة تقفل وقبل ما Kivo يقفل.
+//   الكتابة بتوصل الهارد قبل ما تاخد مكان الملف القديم، والقديم بيفضل workspaces.json.bak، فالجهاز لو قفل فجأة
+//   (25 أكتوبر: hardware error، والملف رجع أصفار) بيفضل فيه ملف سليم. ملفات الـ session بتاعة Firefox مابتتعملش
+//   كده، فبعد crash زي ده Firefox بيرجع لآخر قفلة عادية؛ ونافذة الـ workspace بتتفتح بالتابات اللي هنا لو أحدث.
 // - النافذة: علامة "kivo-workspace" بالـ id جوه الـ session (setCustomWindowValue)، فلو الـ session رجّع النافذة
 //   (restore، أو "Reopen closed window") بترجع workspace لوحدها.
 // - الشكل: زرار في أول شريط التابات (CustomizableUI) وقايمة بشكل Kivo (workspaces.css). ولون الـ workspace هو هيدر
 //   نافذتها (KivoTheme)، عشان الولد يعرف هو فاتح أنهي واحدة من غير ما يدوّر.
+// - الـ taskbar: الـ workspaces في الـ jump list بتاع زرار الـ profile (KivoTaskbar)، والضغطة بتفتحها (--kivo-workspace).
 // النوافذ الخاصة مالهاش workspaces.
 
+import { KivoColorPicker } from "moz-src:///browser/components/kivo/KivoColorPicker.sys.mjs";
 import { KivoTheme, inkOn } from "moz-src:///browser/components/kivo/KivoTheme.sys.mjs";
 
 const lazy = {};
@@ -18,6 +23,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   CustomizableUI: "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
   DeferredTask: "resource://gre/modules/DeferredTask.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  SessionStartup: "moz-src:///browser/components/sessionstore/SessionStartup.sys.mjs",
   SessionStore: "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
   TabStateFlusher: "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs",
 });
@@ -38,8 +44,14 @@ let data = { version: 1, workspaces: [] };
 let loaded = null;
 let quitting = false;
 let saveTask = null;
+// وقت الـ session اللي Firefox رجّعه بعد crash (lastUpdate)، و null لو Kivo اتقفل عادي.
+let crashedSessionTime = null;
 // تايمر تحديث صفحات Kivo وانت بتجرّب لون (previewColor).
 let previewPages = 0;
+// منتقي الألوان (KivoColorPicker) بتاع كل فورم جديدة أو تعديل.
+const pickers = new WeakMap();
+// الـ workspaces اللي نافذتها بتتفتح دلوقتي (open).
+const opening = new Map();
 
 // ---------- التخزين ----------
 
@@ -70,6 +82,8 @@ function clean(raw) {
       color: HEX.test(ws.color ?? "") ? ws.color.toLowerCase() : COLORS[0],
       created: Number.isSafeInteger(ws.created) ? ws.created : Date.now(),
       used: Number.isSafeInteger(ws.used) ? ws.used : Date.now(),
+      // وقت آخر حفظ لتابات النافذة (store). 0 للملفات القديمة، فـ Firefox بيكسب زي الأول.
+      saved: Number.isSafeInteger(ws.saved) ? ws.saved : 0,
       open: ws.open === true,
       tabs: Number.isSafeInteger(ws.tabs) ? ws.tabs : 0,
       window: ws.window && typeof ws.window === "object" && Array.isArray(ws.window.tabs) ? ws.window : null,
@@ -81,17 +95,32 @@ function clean(raw) {
   return { version: 1, workspaces };
 }
 
+/**
+ * الملف، ولو مااتقراش النسخة اللي قبله (.bak). ولو الاتنين مااتقروش والملف موجود، بيتنسخ workspaces.broken.json
+ * قبل ما القايمة الفاضية تتكتب فوقه، عشان اللي فيه مايضيعش.
+ */
 async function load() {
-  try {
-    data = clean(await IOUtils.readJSON(filePath()));
-  } catch {
-    data = { version: 1, workspaces: [] };
+  for (const path of [filePath(), `${filePath()}.bak`]) {
+    try {
+      data = clean(await IOUtils.readJSON(path));
+      return;
+    } catch {}
+  }
+  data = { version: 1, workspaces: [] };
+  if (await IOUtils.exists(filePath())) {
+    await IOUtils.copy(filePath(), PathUtils.join(PathUtils.parent(filePath()), "workspaces.broken.json")).catch(
+      console.error
+    );
   }
 }
 
 async function write() {
   await IOUtils.makeDirectory(PathUtils.parent(filePath()), { ignoreExisting: true });
-  await IOUtils.writeJSON(filePath(), data, { tmpPath: `${filePath()}.tmp` });
+  await IOUtils.writeJSON(filePath(), data, {
+    tmpPath: `${filePath()}.tmp`,
+    backupFile: `${filePath()}.bak`,
+    flush: true,
+  });
 }
 
 function scheduleSave() {
@@ -130,7 +159,15 @@ function tag(win, id) {
   updateWindow(win);
 }
 
-/** العلامة اللي الـ session رجّعها مع النافذة. */
+/** عنوان الصفحة الحالية في كل تاب، عشان نعرف حالتين النافذة زي بعض ولا لأ. */
+function tabUrls(state) {
+  return (state?.tabs ?? []).map(tab => tab.entries?.[(tab.index ?? 1) - 1]?.url ?? "").join("\n");
+}
+
+/**
+ * العلامة اللي الـ session رجّعها مع النافذة. بعد crash، Firefox ممكن يكون رجّع session أقدم من آخر حفظ هنا (25
+ * أكتوبر: ملفاته اتصفّرت، فرجع لآخر قفلة عادية)، فالتابات اللي هنا لو أحدث ومختلفة هي اللي بتتفتح في النافذة.
+ */
 function restoreTag(win) {
   let id = "";
   try {
@@ -140,17 +177,35 @@ function restoreTag(win) {
   if (ws && !windowOf(ws.id)) {
     win.kivoWorkspaceId = ws.id;
     ws.open = true;
+    if (ws.window && crashedSessionTime !== null && ws.saved > crashedSessionTime) {
+      // بعد ما Firefox يخلص ترجيع النافذة دي (restoreTag بيتنادى من SSWindowRestored).
+      win.setTimeout(() => {
+        try {
+          if (tabUrls(lazy.SessionStore.getWindowState(win).windows[0]) !== tabUrls(ws.window)) {
+            lazy.SessionStore.setWindowState(win, { windows: [ws.window] }, true);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 0);
+    }
     scheduleSave();
   }
   updateWindow(win);
 }
 
-/** حالة النافذة في الـ workspace، لو فيها صفحات. حالة فاضية (لسه ماتجمعتش) مابتكتبش فوق حالة سليمة. */
+/**
+ * حالة النافذة في الـ workspace، لو فيها صفحات. حالة فاضية (لسه ماتجمعتش) مابتكتبش فوق حالة سليمة.
+ * من غير التابات اللي اتقفلت قريب (_closedTabs): كانت بتوصل لـ 8 MB في workspace واحدة (فورمات WordPress)، والملف
+ * بيتكتب كله بعد كل تغيير في التابات.
+ */
 function store(ws, state) {
   if (state?.tabs?.some(tab => tab.entries?.length)) {
-    ws.window = state;
+    const { _closedTabs, ...window } = state;
+    ws.window = window;
     ws.tabs = state.tabs.length;
     ws.used = Date.now();
+    ws.saved = ws.used;
   }
 }
 
@@ -214,6 +269,15 @@ async function open(id, opener = null) {
     existing.focus();
     return existing;
   }
+  // الـ jump list ورجوع الـ workspaces بعد التشغيل ممكن يفتحوها في نفس الوقت: نافذة واحدة.
+  if (!opening.has(id)) {
+    opening.set(id, openWindow(ws, opener).finally(() => opening.delete(id)));
+  }
+  return opening.get(id);
+}
+
+async function openWindow(ws, opener) {
+  const { id } = ws;
   const win = lazy.BrowserWindowTracker.openWindow({ openerWindow: opener ?? undefined });
   await waitForWindow(win);
   win.kivoWorkspaceId = id;
@@ -245,6 +309,7 @@ async function create({ name, color, withWindow = null } = {}) {
     color: HEX.test(color ?? "") ? color.toLowerCase() : COLORS[data.workspaces.length % COLORS.length],
     created: Date.now(),
     used: Date.now(),
+    saved: 0,
     open: true,
     tabs: 0,
     window: null,
@@ -295,30 +360,6 @@ async function remove(id) {
 }
 
 // ---------- الزرار والقايمة ----------
-
-function rgb(hex) {
-  const n = Number.parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** #rrggbb لـ [درجة 0..360، تشبع 0..1، فتاحة 0..1]، لمنتقي الألوان. */
-function toHsv(hex) {
-  const [r, g, b] = rgb(hex).map(c => c / 255);
-  const max = Math.max(r, g, b);
-  const d = max - Math.min(r, g, b);
-  const h = !d ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [h * 60, max ? d / max : 0, max];
-}
-
-function fromHsv(h, s, v) {
-  const channel = n => {
-    const k = (n + h / 60) % 6;
-    return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  };
-  return `#${channel(5)}${channel(3)}${channel(1)}`;
-}
 
 function initial(name) {
   return [...name.trim()][0]?.toUpperCase() ?? "?";
@@ -389,6 +430,8 @@ function refreshAll() {
   for (const win of browserWindows()) {
     updateWindow(win);
   }
+  // الـ jump list بتاع الـ taskbar (KivoTaskbar).
+  Services.obs.notifyObservers(null, "kivo-workspaces-changed");
 }
 
 function panelFor(win) {
@@ -408,9 +451,6 @@ function panelFor(win) {
       endPreview();
     });
     panel.addEventListener("submit", event => onSubmit(win, event));
-    panel.addEventListener("input", event => onPanelInput(win, event));
-    panel.addEventListener("pointerdown", onPickerPointer);
-    panel.addEventListener("keydown", onPickerKey);
     panel.addEventListener("keydown", event => {
       if (event.key === "Escape" && panel.querySelector(".kivo-ws-form:not([hidden])")) {
         event.preventDefault();
@@ -461,9 +501,17 @@ function render(win, form = null) {
     );
   }
 
+  let colorPicker = null;
   if (form) {
     const ws = form.id ? find(form.id) : null;
     const color = ws?.color ?? COLORS[data.workspaces.length % COLORS.length];
+    // "+" بيفتح منتقي Kivo (KivoColorPicker) تحت الدواير، وهو نفسه اللي بيفتح لأي <input type="color">.
+    colorPicker = KivoColorPicker.create(doc, {
+      color,
+      onInput: c => pickColor(colorPicker.element.closest(".kivo-ws-form"), c, { from: "picker" }),
+    });
+    colorPicker.element.classList.add("kivo-ws-picker");
+    colorPicker.element.hidden = COLORS.includes(color);
     const swatches = COLORS.map(c =>
       html(doc, "button", {
         type: "button",
@@ -499,7 +547,7 @@ function render(win, form = null) {
             "aria-pressed": COLORS.includes(color) ? "false" : "true",
           }),
         ]),
-        picker(doc, color, !COLORS.includes(color)),
+        colorPicker.element,
         canUseWindow
           ? html(doc, "label", { class: "kivo-ws-check" }, [
               html(doc, "input", { type: "checkbox", class: "kivo-ws-use-window" }),
@@ -520,6 +568,7 @@ function render(win, form = null) {
   body.replaceChildren(...children);
   if (form) {
     const formEl = body.querySelector(".kivo-ws-form");
+    pickers.set(formEl, colorPicker);
     pickColor(formEl, formEl.dataset.color);
     const input = body.querySelector(".kivo-ws-input");
     input.focus();
@@ -562,46 +611,12 @@ function onPanelClick(win, event) {
   }
 }
 
-// ---------- منتقي الألوان ----------
-// زي Chrome: مربع للتشبع (يمين وشمال) والفتاحة (فوق وتحت)، وشريط للدرجة، وخانة للكود. كله جوه القايمة، لأن
-// منتقي Windows بيقفل القايمة وهو بيفتح.
-
-function picker(doc, color, open) {
-  const [h, s, v] = toHsv(color);
-  return html(doc, "div", { class: "kivo-ws-picker", hidden: !open, "data-h": String(h), "data-s": String(s), "data-v": String(v) }, [
-    html(doc, "div", { class: "kivo-ws-sv", tabindex: "0", role: "group", "aria-label": "Strength and lightness. Arrow keys change them." }, [
-      html(doc, "span", { class: "kivo-ws-sv-dot" }),
-    ]),
-    html(doc, "input", { type: "range", class: "kivo-ws-hue", min: "0", max: "359", value: String(Math.round(h)), "aria-label": "Hue" }),
-    html(doc, "div", { class: "kivo-ws-hex-row" }, [
-      html(doc, "span", { class: "kivo-ws-preview" }),
-      html(doc, "input", { type: "text", class: "kivo-ws-hex", value: color, maxlength: "7", spellcheck: "false", "aria-label": "Color code" }),
-    ]),
-  ]);
-}
-
-/** المنتقي بيعرض الدرجة والتشبع والفتاحة اللي متخزنين فيه (عشان الدرجة ماتضيعش في الأبيض والأسود). */
-function showPicker(form, { keepHex = false } = {}) {
-  const box = form?.querySelector(".kivo-ws-picker");
-  if (!box) {
-    return;
-  }
-  const [h, s, v] = ["h", "s", "v"].map(k => Number(box.dataset[k]));
-  const color = form.dataset.color;
-  const sv = box.querySelector(".kivo-ws-sv");
-  sv.style.setProperty("--kivo-ws-hue", `hsl(${Math.round(h)} 100% 50%)`);
-  sv.style.setProperty("--kivo-ws-color", color);
-  sv.style.setProperty("--x", `${s * 100}%`);
-  sv.style.setProperty("--y", `${(1 - v) * 100}%`);
-  box.querySelector(".kivo-ws-hue").value = String(Math.round(h));
-  box.querySelector(".kivo-ws-preview").style.setProperty("--kivo-ws-color", color);
-  if (!keepHex) {
-    box.querySelector(".kivo-ws-hex").value = color;
-  }
-}
+// ---------- اللون ----------
+// المنتقي نفسه في KivoColorPicker (نفسه اللي بيفتح لأي <input type="color"> في Kivo)، جوه القايمة، لأن منتقي Windows
+// كان بيقفل القايمة وهو بيفتح.
 
 /** اللون اللي هيتحفظ: دايرته لو من COLORS، وإلا "+" عليها اللون. from: "picker" لو جاي من المنتقي نفسه. */
-function pickColor(form, color, { from = null, keepHex = false } = {}) {
+function pickColor(form, color, { from = null } = {}) {
   form.dataset.color = color;
   for (const swatch of form.querySelectorAll(".kivo-ws-swatch")) {
     swatch.setAttribute("aria-checked", swatch.dataset.color === color ? "true" : "false");
@@ -610,11 +625,9 @@ function pickColor(form, color, { from = null, keepHex = false } = {}) {
   more?.setAttribute("aria-pressed", COLORS.includes(color) ? "false" : "true");
   more?.style.setProperty("--kivo-ws-color", color);
   more?.style.setProperty("--kivo-ws-ink", inkOn(color));
-  const box = form.querySelector(".kivo-ws-picker");
-  if (box && from !== "picker") {
-    [box.dataset.h, box.dataset.s, box.dataset.v] = toHsv(color).map(String);
+  if (from !== "picker") {
+    pickers.get(form)?.set(color);
   }
-  showPicker(form, { keepHex });
   previewColor(form, color);
 }
 
@@ -637,72 +650,6 @@ function previewColor(form, color) {
 /** كل نافذة بترجع للون الـ workspace المتحفظ (updateWindow بيقارن، فاللي ماتغيرش مابيتلمسش). */
 function endPreview() {
   refreshAll();
-}
-
-function fromPicker(form) {
-  const box = form.querySelector(".kivo-ws-picker");
-  pickColor(form, fromHsv(Number(box.dataset.h), Number(box.dataset.s), Number(box.dataset.v)), { from: "picker" });
-}
-
-function onPanelInput(win, event) {
-  const form = event.target.closest?.(".kivo-ws-form");
-  if (!form) {
-    return;
-  }
-  if (event.target.classList.contains("kivo-ws-hue")) {
-    form.querySelector(".kivo-ws-picker").dataset.h = event.target.value;
-    fromPicker(form);
-  } else if (event.target.classList.contains("kivo-ws-hex")) {
-    const text = event.target.value.trim();
-    const hex = (text.startsWith("#") ? text : `#${text}`).toLowerCase();
-    if (HEX.test(hex)) {
-      pickColor(form, hex, { keepHex: true });
-    }
-  }
-}
-
-/** سحب في المربع: يمين أكتر = لون أقوى، وفوق أكتر = أفتح. */
-function onPickerPointer(event) {
-  const sv = event.target.closest?.(".kivo-ws-sv");
-  if (!sv || event.button !== 0) {
-    return;
-  }
-  const form = sv.closest(".kivo-ws-form");
-  const box = sv.closest(".kivo-ws-picker");
-  const move = e => {
-    const r = sv.getBoundingClientRect();
-    const clamp = n => Math.min(1, Math.max(0, n));
-    box.dataset.s = String(clamp((e.clientX - r.left) / r.width));
-    box.dataset.v = String(1 - clamp((e.clientY - r.top) / r.height));
-    fromPicker(form);
-  };
-  const up = () => {
-    sv.removeEventListener("pointermove", move);
-    sv.removeEventListener("pointerup", up);
-    sv.removeEventListener("lostpointercapture", up);
-  };
-  sv.setPointerCapture(event.pointerId);
-  sv.addEventListener("pointermove", move);
-  sv.addEventListener("pointerup", up);
-  sv.addEventListener("lostpointercapture", up);
-  sv.focus();
-  move(event);
-  event.preventDefault();
-}
-
-function onPickerKey(event) {
-  const sv = event.target.closest?.(".kivo-ws-sv");
-  const step = { ArrowLeft: [-0.05, 0], ArrowRight: [0.05, 0], ArrowUp: [0, 0.05], ArrowDown: [0, -0.05] }[event.key];
-  if (!sv || !step) {
-    return;
-  }
-  const box = sv.closest(".kivo-ws-picker");
-  const clamp = n => Math.min(1, Math.max(0, n));
-  box.dataset.s = String(clamp(Number(box.dataset.s) + step[0]));
-  box.dataset.v = String(clamp(Number(box.dataset.v) + step[1]));
-  fromPicker(sv.closest(".kivo-ws-form"));
-  event.preventDefault();
-  event.stopPropagation();
 }
 
 function onSubmit(win, event) {
@@ -811,6 +758,46 @@ function onWindowReady(win) {
   });
 }
 
+// ---------- الـ jump list بتاع الـ taskbar ----------
+
+// "Kivo.exe -profile <path> --kivo-workspace <id>" من الـ jump list (KivoTaskbar). لو الـ profile ده مفتوح، Firefox بيبعت
+// الـ command line للنسخة المفتوحة، فبتفتح الـ workspace (أو بتروح لنافذتها) من غير نافذة زيادة. ولو مقفول، Kivo
+// بيفتح عادي بالـ session، والـ workspace بعده (reopenOnStartup).
+const COMMAND_LINE_CONTRACT = "@kivo/workspaces-command-line;1";
+let startupWorkspace = null;
+
+const commandLineHandler = {
+  QueryInterface: ChromeUtils.generateQI(["nsICommandLineHandler"]),
+  helpInfo: "  --kivo-workspace <id>  Open a Kivo workspace.\n",
+  handle(cmdLine) {
+    const id = cmdLine.handleFlagWithParam("kivo-workspace", false);
+    if (id === null) {
+      return;
+    }
+    if (cmdLine.state === Ci.nsICommandLine.STATE_INITIAL_LAUNCH) {
+      startupWorkspace = ID.test(id) ? id : null;
+      return;
+    }
+    cmdLine.preventDefault = true;
+    // workspace اتمسحت بعد ما الـ jump list اتكتب: Kivo نفسه بييجي قدام بدل ما مايحصلش حاجة.
+    const focus = () => lazy.BrowserWindowTracker.getTopWindow()?.focus();
+    if (ID.test(id)) {
+      open(id).catch(focus);
+    } else {
+      focus();
+    }
+  },
+};
+
+function registerCommandLine() {
+  const factory = { createInstance: iid => commandLineHandler.QueryInterface(iid) };
+  Components.manager
+    .QueryInterface(Ci.nsIComponentRegistrar)
+    .registerFactory(Components.ID("{45e6cd60-5961-4882-b699-82872260f83a}"), "Kivo workspaces command line", COMMAND_LINE_CONTRACT, factory);
+  // قبل m-browser (BrowserContentHandler)، اللي كان هيفتح نافذة جديدة كمان.
+  Services.catMan.addCategoryEntry("command-line-handler", "m-a-kivo-workspace", COMMAND_LINE_CONTRACT, false, true);
+}
+
 /** بعد ما الـ session يرجع النوافذ: الـ workspaces اللي كانت مفتوحة لما Kivo اتقفل بترجع، لو مارجعتش لوحدها. */
 async function reopenOnStartup() {
   await loaded;
@@ -820,12 +807,25 @@ async function reopenOnStartup() {
       await open(ws.id, opener).catch(console.error);
     }
   }
+  // Kivo اتفتح من الـ jump list على workspace.
+  if (startupWorkspace) {
+    const id = startupWorkspace;
+    startupWorkspace = null;
+    await open(id, opener).catch(console.error);
+  }
 }
 
 export const KivoWorkspaces = {
   /** category browser-before-ui-startup. */
   init() {
     loaded = load();
+    registerCommandLine();
+    // قبل ما النوافذ ترجع، ومن غير ما نستنى: SessionStartup بيمسح الـ state بعد ما الـ session يرجع.
+    lazy.SessionStartup.onceInitialized.then(() => {
+      if (lazy.SessionStartup.previousSessionCrashed) {
+        crashedSessionTime = lazy.SessionStartup.state?.session?.lastUpdate ?? null;
+      }
+    });
     saveTask = new lazy.DeferredTask(() => write(), 1000);
     captureTask = new lazy.DeferredTask(async () => {
       await captureAll();

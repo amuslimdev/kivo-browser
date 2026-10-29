@@ -9,7 +9,8 @@
 // Restarts keep the identity (the engine saves XUL_APP_FILE for them). Other profiles open in a new
 // engine process (Firefox's launchInstance): KIVO_APP_FILE tells KivoProfiles.sys.mjs which -app to pass.
 // Updates (Updater.cs) are applied here, before the engine starts. "Restart to update" in Kivo starts
-// "Kivo.exe --kivo-restart" and quits; that flag is ours and never reaches the engine.
+// "Kivo.exe --kivo-restart" and quits; that flag is ours and never reaches the engine. The engine also runs
+// "Kivo.exe --kivo-jumplist <file>" to write the taskbar Jump Lists (JumpList.cs).
 //
 // Built by package.ps1 with the C# compiler that ships with Windows (.NET Framework 4), so it needs
 // no runtime and no Visual Studio. Kept ASCII and C# 5.
@@ -28,6 +29,8 @@ static class KivoLauncher
 {
     const string RestartFlag = "--kivo-restart";
 
+    // STA for the shell's Jump List objects (JumpList.cs).
+    [STAThread]
     static int Main()
     {
         // The arguments exactly as Windows passed them (URLs, -osint, quoting).
@@ -35,6 +38,10 @@ static class KivoLauncher
         if (KivoUpdater.IsApplyRun(arguments))
         {
             return KivoUpdater.Apply(arguments);
+        }
+        if (KivoJumpList.IsRun(arguments))
+        {
+            return KivoJumpList.Write(arguments);
         }
 
         string dir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');

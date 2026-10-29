@@ -1,23 +1,26 @@
 diff --git a/browser/components/BrowserComponents.manifest b/browser/components/BrowserComponents.manifest
-index d3b32a07ec..bb19297d19 100644
+index 42e3bd8379c..ca20e7c6b69 100644
 --- a/browser/components/BrowserComponents.manifest
 +++ b/browser/components/BrowserComponents.manifest
-@@ -24,6 +24,10 @@ category browser-before-ui-startup moz-src:///browser/components/remotecontrol/R
+@@ -24,6 +24,12 @@ category browser-before-ui-startup moz-src:///browser/components/remotecontrol/R
  category browser-before-ui-startup resource:///modules/AboutHomeStartupCache.sys.mjs AboutHomeStartupCache.init
- category browser-before-ui-startup resource:///modules/AccountsGlue.sys.mjs AccountsGlue.init
+ category browser-before-ui-startup moz-src:///browser/components/AccountsGlue.sys.mjs AccountsGlue.init
  category browser-before-ui-startup moz-src:///browser/modules/ObserverForwarder.sys.mjs ObserverForwarder.init
 +category browser-before-ui-startup moz-src:///browser/components/kivo/KivoProfiles.sys.mjs KivoProfiles.init
 +category browser-before-ui-startup moz-src:///browser/components/kivo/KivoProfileMenu.sys.mjs KivoProfileMenu.init
 +category browser-before-ui-startup moz-src:///browser/components/kivo/KivoWorkspaces.sys.mjs KivoWorkspaces.init
++category browser-before-ui-startup moz-src:///browser/components/kivo/KivoTaskbar.sys.mjs KivoTaskbar.init
++category browser-before-ui-startup moz-src:///browser/components/kivo/KivoColorPicker.sys.mjs KivoColorPicker.init
 +category browser-before-ui-startup moz-src:///browser/components/kivo/KivoShell.sys.mjs KivoShell.init
  #ifdef XP_WIN
  category browser-before-ui-startup moz-src:///browser/components/shell/StartupOSIntegration.sys.mjs StartupOSIntegration.applyCustomIconOnStartup
  #endif
-@@ -38,6 +42,7 @@ category browser-window-before-initial-xul-layout-document-preparation chrome://
+@@ -38,6 +44,8 @@ category browser-window-before-initial-xul-layout-document-preparation chrome://
  
  category browser-window-before-initial-xul-layout resource://gre/modules/LightweightThemeConsumer.sys.mjs LightweightThemeConsumer.init
  category browser-window-before-initial-xul-layout moz-src:///browser/themes/ToolbarIconColor.sys.mjs ToolbarIconColor.init
 +category browser-window-before-initial-xul-layout moz-src:///browser/components/kivo/KivoTheme.sys.mjs KivoTheme.init
++category browser-window-before-initial-xul-layout moz-src:///browser/components/kivo/KivoSidebar.sys.mjs KivoSidebar.init
  category browser-window-before-initial-xul-layout chrome://browser/content/browser-customtitlebar.js CustomTitlebar.init
  
  # The two categories below are specific to Tabbrowser creation. For consumers that need to initialize during

@@ -1,0 +1,164 @@
+/*
+ * لستة الأدوات في Customize sidebar (sidebar-tools.mjs). جوه الـ shadow root بتاع sidebar-customize، فبتغيّر الصفحة دي بس.
+ * الألوان من pages.css (--kivo-*) لما KivoTheme يحمّله، وإلا ألوان Firefox.
+ */
+
+.sidebar-panel {
+  font-family: var(--kivo-font, inherit);
+}
+
+.kivo-tool {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  min-height: var(--button-min-height, 32px);
+  padding-block: var(--space-xsmall);
+  border-radius: var(--border-radius-small);
+  position: relative;
+
+  & + .kivo-tool,
+  .kivo-tool-option + & {
+    border-top: 0.5px solid var(--panel-separator-color);
+  }
+
+  &:hover {
+    background-color: color-mix(in srgb, var(--kivo-accent, currentColor) 8%, transparent);
+  }
+
+  &.kivo-dragging {
+    opacity: 0.45;
+  }
+
+  /* مكان السحب: خط بلون الـ profile فوق السطر أو تحته. */
+  &.kivo-drop-before::before,
+  &.kivo-drop-after::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    height: 2px;
+    border-radius: 1px;
+    background-color: var(--kivo-accent, var(--focus-outline-color));
+  }
+
+  &.kivo-drop-before::before {
+    top: -1px;
+  }
+
+  &.kivo-drop-after::after {
+    bottom: -1px;
+  }
+}
+
+/* النقط اللي بتسحب منها (وبالأسهم من الكيبورد). باهتة لحد ما الماوس ييجي على السطر. */
+.kivo-tool-grip {
+  width: 16px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: grab;
+  border-radius: var(--border-radius-small);
+  background: url("chrome://global/skin/icons/move-16.svg") center no-repeat;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  opacity: 0.35;
+
+  .kivo-tool:hover > &,
+  &:focus-visible {
+    opacity: 0.8;
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: 1px;
+  }
+}
+
+.kivo-tool-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-inline-end: var(--space-xsmall);
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+
+.kivo-tool-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* زرار الشيل باهت لحد ما الماوس ييجي على السطر أو الزرار عليه الـ focus. */
+.kivo-tool-remove {
+  opacity: 0.55;
+
+  .kivo-tool:hover > &,
+  &:focus-within {
+    opacity: 1;
+  }
+}
+
+.kivo-tool-option {
+  padding-block: 0 var(--space-small);
+  padding-inline-start: calc(16px + var(--space-small) + 16px + var(--space-medium));
+}
+
+/* "Add a tool" بلون الـ profile، تحت آخر أداة. */
+.kivo-add {
+  display: block;
+  margin-block: var(--space-small);
+
+  &::part(button) {
+    width: 100%;
+    justify-content: flex-start;
+    color: var(--kivo-accent-ink, var(--link-color));
+    background-color: transparent;
+    font-weight: var(--font-weight-heading, 600);
+  }
+
+  &::part(button):hover {
+    background-color: color-mix(in srgb, var(--kivo-accent, currentColor) 14%, transparent);
+  }
+}
+
+/* "Any website…": العنوان والاسم تحت الزرار. */
+.kivo-site {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+  margin-block-end: var(--space-medium);
+  padding: var(--space-medium);
+  border-radius: var(--border-radius-medium);
+  background-color: color-mix(in srgb, var(--kivo-accent, currentColor) 7%, transparent);
+}
+
+.kivo-site-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxsmall, 2px);
+  font-size: 0.9em;
+
+  > input {
+    font: inherit;
+    font-size: 1.05em;
+    padding: var(--space-xsmall) var(--space-small);
+    border: 1px solid var(--border-color, color-mix(in srgb, currentColor 25%, transparent));
+    border-radius: var(--border-radius-small);
+    background-color: var(--background-color-box, Field);
+    color: inherit;
+
+    &:focus-visible {
+      outline: 2px solid var(--kivo-accent, var(--focus-outline-color));
+      outline-offset: -1px;
+    }
+  }
+}
+
+.kivo-site-error {
+  margin: 0;
+  color: var(--text-color-error, #c50042);
+  font-size: 0.9em;
+}
+
+.kivo-site-buttons {
+  display: flex;
+  gap: var(--space-small);
+}

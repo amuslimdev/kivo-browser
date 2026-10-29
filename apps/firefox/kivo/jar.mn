@@ -5,13 +5,28 @@
 # Kivo profiles (G3): profiles/ restyles Firefox's profile pages; see the overrides at the end.
 # Kivo workspaces (G4): workspaces.css, imported by kivo.css, and the button icon.
 # Kivo profile button (G3): profile-menu.css, imported by kivo.css.
+# The color picker (KivoColorPicker.sys.mjs) in the workspaces menu and for every <input type="color">:
+# color-picker.css, loaded into each window that shows it, and the eyedropper icon.
+# Sidebar tools (KivoSidebar.sys.mjs): the panel for extra chatbots and any website (sidebar-web.*), the
+# tools list in Customize sidebar (sidebar-tools.*, loaded into Firefox's sidebar-customize.html), and the
+# launcher icons in one row (sidebar-main.css; see the override at the end).
 browser.jar:
     content/browser/kivo/kivo.css (kivo.css)
     content/browser/kivo/fonts.css (fonts.css)
     content/browser/kivo/workspaces.css (workspaces.css)
     content/browser/kivo/workspaces.svg (workspaces.svg)
+    content/browser/kivo/color-picker.css (color-picker.css)
+    content/browser/kivo/eyedropper.svg (eyedropper.svg)
     content/browser/kivo/profile-menu.css (profile-menu.css)
     content/browser/kivo/pages.css (pages.css)
+    content/browser/kivo/findbar.css (findbar.css)
+    content/browser/kivo/sidebar-web.html (sidebar-web.html)
+    content/browser/kivo/sidebar-web.mjs (sidebar-web.mjs)
+    content/browser/kivo/sidebar-web.css (sidebar-web.css)
+    content/browser/kivo/sidebar-tools.mjs (sidebar-tools.mjs)
+    content/browser/kivo/sidebar-tools.css (sidebar-tools.css)
+    content/browser/kivo/sidebar-main.css (sidebar-main.css)
+    content/browser/kivo/firefox/sidebar-main.css (/browser/components/sidebar/sidebar-main.css)
     content/browser/kivo/profiles/ (profiles/*)
     content/browser/kivo/firefox/profile-selector.css (/browser/components/profiles/content/profile-selector.css)
     content/browser/kivo/firefox/profile-card.css (/browser/components/profiles/content/profile-card.css)
@@ -90,11 +105,12 @@ browser.jar:
 # restart: The Little One, sleepy with a teddy: about:restartrequired.
 % override chrome://global/skin/illustrations/kit-sympathetic.svg chrome://browser/content/kivo/mascot/restart.svg
 
-# concerned: The Quiet Boy with an unplugged cable: no connection, a data breach, sync failed.
+# concerned: The Quiet Boy with an unplugged cable: no connection, a data breach, sync failed, an AI tab error.
 % override chrome://global/skin/illustrations/no-connection.svg chrome://browser/content/kivo/mascot/concerned-3x2.svg
 % override chrome://browser/content/controlcenter/assets/fox-concern.svg chrome://browser/content/kivo/mascot/concerned.svg
 % override chrome://global/skin/illustrations/kit-concerned.svg chrome://browser/content/kivo/mascot/concerned-4x3.svg
 % override chrome://browser/skin/sidebar/kit-tabs-devices-error.svg chrome://browser/content/kivo/mascot/concerned-wide.svg
+% override chrome://browser/content/aiwindow/assets/aitab-error-kit.svg chrome://browser/content/kivo/mascot/concerned.svg
 
 # empty: The Little One peeking into an empty box: no history, no synced tabs.
 % override chrome://browser/skin/sidebar/kit-page-history.svg chrome://browser/content/kivo/mascot/empty-4x3.svg
@@ -200,3 +216,6 @@ browser.jar:
 % override chrome://browser/skin/privatebrowsing/aboutPrivateBrowsing.css chrome://browser/content/kivo/private/aboutPrivateBrowsing.css
 
 # about:logins without the Mozilla account and Sync steps (Kivo has no Mozilla account).
+
+# Sidebar tools in one row with the rest under "More tools" (sidebar-main.css), on top of Firefox's own copy.
+% override chrome://browser/content/sidebar/sidebar-main.css chrome://browser/content/kivo/sidebar-main.css

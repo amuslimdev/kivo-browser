@@ -1,0 +1,228 @@
+/*
+ * البحث في الصفحة (Ctrl+F) زي Chrome: صندوق صغير بينزل فوق في ركن الصفحة، وفوقها من غير ما يزقّها، بدل شريط Firefox
+ * اللي تحت. فيه الكلمة، والعدد (1/5، KivoShell.sys.mjs)، وخط، والسهمين، وزرار الاختيارات، والقفل. اختيارات Firefox
+ * (Highlight All، و Match Case، و Match Diacritics، و Whole Words) في صف تاني بيفتح من الزرار، كأزرار صغيرة بتتلوّن
+ * لما تشتغل. وكل النتايج متعلم عليها بالأصفر والحالية بالبرتقاني زي Chrome (firefox-branding.js).
+ * بخلفية شريط الأدوات ولون كلامه، واستدارة الـ profile.
+ */
+
+:root[kivo-theme] .browserContainer > findbar {
+  /* نفس خانة الصفحة في الـ grid بتاع .browserContainer (content-area.css)، فوقها في الركن. */
+  grid-area: browserstack;
+  align-self: start;
+  justify-self: end;
+  z-index: 1;
+  align-items: center;
+  /* صف الاختيارات بينزل تحت الكلمة والقفل. */
+  flex-wrap: wrap;
+  width: 380px;
+  max-width: calc(100% - 24px);
+  min-height: 0;
+  box-sizing: border-box;
+  margin: 8px 12px 0;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--kivo-toolbar-ink) 14%, transparent);
+  border-radius: calc(var(--kivo-radius) + 4px);
+  background: var(--kivo-toolbar);
+  color: var(--kivo-toolbar-ink);
+  box-shadow:
+    0 6px 20px rgb(0 0 0 / 0.16),
+    0 1px 4px rgb(0 0 0 / 0.12);
+  transition-property: opacity, translate, visibility;
+  transition-duration: 150ms, 150ms, 0s;
+  transition-timing-function: ease-out;
+
+  &[hidden] {
+    opacity: 0;
+    translate: 0 -8px;
+    visibility: hidden;
+    transition-delay: 0s, 0s, 150ms;
+  }
+
+  &[noanim] {
+    transition-duration: 0s;
+    transition-delay: 0s;
+  }
+
+  @media (prefers-reduced-motion) {
+    transition-duration: 0s;
+    transition-delay: 0s;
+  }
+
+  > .findbar-container {
+    margin: 0;
+    padding: 0;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* الكلمة والعدد والسهمين في صف واحد: الـ hbox اللي فيه الكلمة والسهمين بيسيبهم للصف بتاع البار. */
+  [anonid="findbar-textbox-wrapper"] {
+    display: contents;
+  }
+
+  .findbar-textbox {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    min-height: 32px;
+    padding-inline: 10px 6px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    outline: none;
+    box-shadow: none;
+
+    &:focus,
+    &[status="notfound"],
+    &[flash="true"] {
+      background: transparent;
+      color: inherit;
+      outline: none;
+      box-shadow: none;
+    }
+  }
+
+  .found-matches {
+    order: 2;
+    margin: 0 4px;
+    color: color-mix(in srgb, var(--kivo-toolbar-ink) 62%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* أيقونة الحالة مالهاش لازمة هنا، فبقت الخط اللي بين العدد والسهمين زي Chrome. */
+  .find-status-icon {
+    display: flex;
+    order: 3;
+    width: 1px;
+    height: 20px;
+    margin-inline: 6px 2px;
+    background: color-mix(in srgb, var(--kivo-toolbar-ink) 18%, transparent);
+    list-style-image: none;
+  }
+
+  .findbar-find-previous,
+  .findbar-find-next {
+    order: 4;
+    margin: 0;
+    padding: 6px;
+    border-radius: var(--kivo-radius);
+  }
+
+  .findbar-find-next {
+    order: 5;
+  }
+
+  .close-icon.findbar-closebutton {
+    margin: 0;
+    margin-inline-start: 2px;
+    padding: 6px;
+    width: auto;
+    border-color: transparent;
+    border-radius: var(--kivo-radius);
+  }
+
+  /* زرار الاختيارات: مدوس والصف مفتوح، وعليه نقطة بلون الـ profile لو اختيار بيغيّر النتايج شغال والصف مقفول. */
+  .kivo-find-options-button {
+    order: 6;
+    appearance: none;
+    margin: 0;
+    padding: 6px;
+    border-radius: var(--kivo-radius);
+    color: inherit;
+    list-style-image: url(chrome://global/skin/icons/more.svg);
+    -moz-context-properties: fill;
+    fill: var(--toolbarbutton-icon-fill);
+
+    &:hover {
+      background-color: var(--toolbarbutton-background-color-hover);
+    }
+
+    &[checked] {
+      background-color: var(--toolbarbutton-background-color-active);
+    }
+
+    &[kivo-filtered]:not([checked]) {
+      background-image: radial-gradient(circle at calc(100% - 5px) 5px, var(--kivo-accent) 3px, transparent 3.5px);
+    }
+
+    &:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-outline-inset);
+    }
+  }
+
+  /* صف الاختيارات: نفس الـ checkboxes بتاعة Firefox، كل واحد زرار صغير بعلامة ✓ لما يشتغل. */
+  .kivo-find-options {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 4px 2px 2px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--kivo-toolbar-ink) 12%, transparent);
+
+    > checkbox {
+      margin: 0;
+      min-width: 0;
+      min-height: 30px;
+      padding-inline: 10px;
+      border: 1px solid color-mix(in srgb, var(--kivo-toolbar-ink) 18%, transparent);
+      border-radius: var(--kivo-field-radius);
+      color: inherit;
+
+      &:hover {
+        background-color: var(--toolbarbutton-background-color-hover);
+      }
+
+      &[checked] {
+        border-color: var(--kivo-accent);
+        background-color: color-mix(in srgb, var(--kivo-accent) 16%, transparent);
+      }
+
+      &:focus-visible {
+        outline: var(--focus-outline);
+        outline-offset: 1px;
+      }
+
+      > .checkbox-check {
+        display: none;
+      }
+
+      &[checked] > .checkbox-check {
+        display: flex;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        margin-inline-end: 6px;
+        background: url(chrome://global/skin/icons/check.svg) center / 14px no-repeat;
+        -moz-context-properties: fill;
+        fill: currentColor;
+        outline: none;
+      }
+
+      .checkbox-label {
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+
+  /* Quick find (/ و ') صغير زي Firefox: من غير اختيارات. */
+  &:has(.findbar-textbox.minimal) > .kivo-find-options {
+    display: none;
+  }
+
+  /* "Phrase not found" و "Reached end of page" مش باينين زي Chrome (العدد بيقول)، بس قارئ الشاشة بيقراهم. */
+  .findbar-find-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

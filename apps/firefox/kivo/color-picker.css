@@ -1,0 +1,234 @@
+/*
+ * منتقي الألوان (KivoColorPicker.sys.mjs): نفس الشكل في قايمة الـ workspaces وفي أي <input type="color">. زي Chrome:
+ * المربع (التشبع يمين وشمال، والفتاحة فوق وتحت)، وتحته القطّارة واللون وشريط الدرجات، وخانة الكود. بخط الثيم
+ * واستدارته ولونه (--kivo-font و --kivo-radius و --kivo-accent)، واللون المتختار في --kivo-picker-color.
+ */
+
+.kivo-picker {
+  display: grid;
+  gap: 10px;
+  font-family: var(--kivo-font, "Segoe UI"), sans-serif;
+  font-size: 13px;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.kivo-picker-sv {
+  position: relative;
+  height: 140px;
+  border-radius: 8px;
+  background-color: var(--kivo-picker-hue, red);
+  background-image: linear-gradient(to top, rgb(0 0 0), rgb(0 0 0 / 0)), linear-gradient(to right, rgb(255 255 255), rgb(255 255 255 / 0));
+  cursor: crosshair;
+  touch-action: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 2px;
+  }
+}
+
+.kivo-picker-dot {
+  position: absolute;
+  left: var(--x, 0%);
+  top: var(--y, 0%);
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--kivo-picker-color);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.kivo-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* القطّارة: لون من أي حتة في النافذة. وهي شغالة (aria-pressed) بلون الثيم. */
+.kivo-picker-eyedropper {
+  appearance: none;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--kivo-radius, 8px);
+  background: url("chrome://browser/content/kivo/eyedropper.svg") center / 18px no-repeat;
+  color: inherit;
+  -moz-context-properties: fill;
+  fill: currentColor;
+
+  &:hover {
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  &[aria-pressed="true"] {
+    background-color: color-mix(in srgb, var(--kivo-accent, AccentColor) 22%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 1px;
+  }
+}
+
+.kivo-picker-preview {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--kivo-picker-color);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.kivo-picker-hue {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 12px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(0 100% 50%),
+    hsl(60 100% 50%),
+    hsl(120 100% 50%),
+    hsl(180 100% 50%),
+    hsl(240 100% 50%),
+    hsl(300 100% 50%),
+    hsl(360 100% 50%)
+  );
+
+  &::-moz-range-track {
+    background: transparent;
+  }
+
+  &::-moz-range-progress {
+    background: transparent;
+  }
+
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--kivo-accent, AccentColor);
+    outline-offset: 3px;
+  }
+}
+
+/* الكود: أي لون CSS بيتكتب أو يتلزق، ولو الكلام مش لون الإطار بيحمر لحد ما يبقى لون. */
+.kivo-picker-code {
+  box-sizing: border-box;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 12px/1 Consolas, "Cascadia Mono", monospace;
+
+  &:focus-visible {
+    border-color: var(--kivo-accent, AccentColor);
+    outline: none;
+  }
+
+  &[aria-invalid="true"] {
+    border-color: #d93d4a;
+  }
+}
+
+/* <input type="color">: المنتقي لوحده في الـ panel بتاع Firefox (#ColorPickerPanel). */
+panel.kivo-picker-panel .kivo-picker {
+  width: 260px;
+  padding: 12px;
+}
+
+/* ---------- القطّارة: صورة النافذة فوقيها، ودايرة مكبّرة بتمشي مع الماوس ---------- */
+
+panel.kivo-eyedropper {
+  --panel-box-shadow-margin: 0px;
+  --panel-padding: 0;
+  --panel-border-radius: 0;
+  --panel-border-color: transparent;
+  --panel-box-shadow: none;
+  --panel-background-color: transparent;
+}
+
+.kivo-eyedropper-box {
+  position: relative;
+  overflow: hidden;
+}
+
+.kivo-eyedropper-shot {
+  display: block;
+  cursor: crosshair;
+  outline: none;
+}
+
+/* الدايرة هي المؤشر، زي Chrome. */
+.kivo-eyedropper-box:has(> .kivo-eyedropper-loupe:not([hidden])) > .kivo-eyedropper-shot {
+  cursor: none;
+}
+
+.kivo-eyedropper-loupe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 110px;
+  margin: -55px 0 0 -55px;
+  pointer-events: none;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.kivo-eyedropper-zoom {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 4px rgb(0 0 0 / 0.35),
+    0 8px 20px rgb(0 0 0 / 0.35);
+}
+
+.kivo-eyedropper-code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 5px;
+  border-radius: 999px;
+  background: rgb(20 20 28 / 0.88);
+  color: #fff;
+  font: 600 12px/1.4 Consolas, "Cascadia Mono", monospace;
+  white-space: nowrap;
+
+  &::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--kivo-picker-color);
+    box-shadow: 0 0 0 1px #fff;
+  }
+}

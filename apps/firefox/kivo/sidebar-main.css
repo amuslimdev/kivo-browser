@@ -1,0 +1,22 @@
+/*
+ * أيقونات الأدوات في الـ sidebar (KivoSidebar.sys.mjs). Firefox بيرصّها صفوف فوق بعض لما الـ sidebar يبقى عريض
+ * (wrap-reverse)، فمع chatbots ومواقع كتير كانت بتبقى صفين وتلاتة. Kivo: صف واحد على قد المكان، والباقي في زرار
+ * "More tools" بتاع Firefox نفسه (بيشيل اللي مش باين ويحطه في قايمته). اللي بيبان هما أول الأدوات بترتيبها في
+ * Customize. بيتحط مكان sidebar-main.css (jar.mn) وبيحمّل نسخة Firefox.
+ */
+@import url("chrome://browser/content/kivo/firefox/sidebar-main.css");
+
+:host([expanded]) {
+  .tools-and-extensions[orientation="horizontal"] {
+    flex-wrap: nowrap;
+  }
+
+  /* الارتفاع اللي Firefox بيحفظه لما الخط اللي فوق الأدوات يتسحب مالوش لازمة مع صف واحد، والخط نفسه بيفضل فاصل بس. */
+  .buttons-wrapper {
+    height: auto !important;
+  }
+
+  #sidebar-tools-and-extensions-splitter {
+    pointer-events: none;
+  }
+}

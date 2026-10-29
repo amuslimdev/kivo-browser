@@ -12,6 +12,8 @@
 @import url("chrome://browser/content/kivo/workspaces.css");
 /* زرار الـ profile (G3). */
 @import url("chrome://browser/content/kivo/profile-menu.css");
+/* البحث في الصفحة زي Chrome. */
+@import url("chrome://browser/content/kivo/findbar.css");
 
 :root[kivo-theme] {
   --kivo-radius: 10px;
@@ -72,6 +74,14 @@
   --color-accent-primary: var(--kivo-accent);
   --color-accent-primary-hover: color-mix(in srgb, var(--kivo-accent) 88%, black);
   --color-accent-primary-active: color-mix(in srgb, var(--kivo-accent) 78%, black);
+  /*
+   * اللينكات (منها عناوين المواقع في نتايج شريط العنوان) والأيقونة اللي بتنبّه (التحميلات): Firefox بياخدهم من
+   * --color-accent-primary، فلون فاتح أوي كان بيختفي. نسخة واضحة من اللون بدله (KivoTheme: --kivo-accent-ink).
+   */
+  --link-color: var(--kivo-accent-ink);
+  --link-color-hover: var(--kivo-accent-ink);
+  --link-color-active: var(--kivo-accent-ink);
+  --toolbarbutton-icon-fill-attention: var(--kivo-accent-ink);
   --button-text-color-primary: var(--kivo-on-accent);
   --button-text-color-primary-hover: var(--kivo-on-accent);
   --button-text-color-primary-active: var(--kivo-on-accent);
@@ -191,6 +201,16 @@
   padding-inline-start: var(--kivo-radius);
 }
 
+/* الـ pinned tabs في scrollbox لوحدها بتقص على حدودها، فانحناءتين التاب المختار منها كانوا بيتقصّوا. مسافة بقد الانحناءة
+ * من الناحيتين، والتابات العادية بتدخل في مسافة النهاية، فالفرق بين الـ pinned والعادية بيفضل زي ما هو. */
+:root[kivo-theme] #pinned-tabs-container[orient="horizontal"]::part(scrollbox) {
+  padding-inline: var(--kivo-radius);
+}
+
+:root[kivo-theme] #pinned-tabs-container[orient="horizontal"]:not(:empty) ~ #tabbrowser-arrowscrollbox[orient="horizontal"] {
+  margin-inline-start: calc(-1 * var(--kivo-radius));
+}
+
 /* خط الثيم في عناوين التابات، زي صفحات Kivo. شريط العنوان بيفضل بخط Windows عشان الـ URL يتقري بسهولة. */
 :root[kivo-theme] .tab-label {
   font-family: var(--kivo-font);
@@ -207,6 +227,29 @@
 :root[kivo-theme] #urlbar[focused]:not([open]) > .urlbar-background {
   outline: 2px solid var(--kivo-accent) !important;
   outline-offset: -2px;
+}
+
+/*
+ * الأزرار اللي جوه شريط العنوان (اختيار محرك البحث، و Not Secure، والزوم، والنجمة، والـ chip بتاع محرك البحث) بلون
+ * كلام شريط الأدوات زي أزرار شريط الأدوات. Firefox بيديهم رمادي ثابت (#cfcfd8) وبنفسجي Nova، فكانوا باينين غريبين
+ * على لون الـ profile أو الـ workspace.
+ */
+:root[kivo-theme] #urlbar {
+  --urlbar-box-background-color: color-mix(in srgb, var(--kivo-toolbar-ink) 8%, transparent);
+  --urlbar-box-background-color-focus: color-mix(in srgb, var(--kivo-toolbar-ink) 8%, transparent);
+  --urlbar-box-background-color-hover: color-mix(in srgb, var(--kivo-toolbar-ink) 12%, transparent);
+  --urlbar-box-background-color-active: color-mix(in srgb, var(--kivo-toolbar-ink) 18%, transparent);
+}
+
+:root[kivo-theme] #urlbar .searchmode-switcher {
+  --button-background-color-muted: color-mix(in srgb, var(--kivo-toolbar-ink) 8%, transparent);
+  --button-background-color-muted-hover: color-mix(in srgb, var(--kivo-toolbar-ink) 12%, transparent);
+  --button-background-color-muted-active: color-mix(in srgb, var(--kivo-toolbar-ink) 18%, transparent);
+  --button-background-color-muted-selected: color-mix(in srgb, var(--kivo-toolbar-ink) 18%, transparent);
+  --button-text-color-muted: var(--kivo-toolbar-ink);
+  --button-text-color-muted-hover: var(--kivo-toolbar-ink);
+  --button-text-color-muted-active: var(--kivo-toolbar-ink);
+  --button-text-color-muted-selected: var(--kivo-toolbar-ink);
 }
 
 :root[kivo-theme] #nav-bar {

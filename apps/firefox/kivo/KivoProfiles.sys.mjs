@@ -8,6 +8,7 @@
 // - الاسم: أول profile اسمه اسم حساب Windows بدل "Original profile". الاسم بيتغير من صفحة تعديل الـ profile.
 // - الهوية: Firefox بيفتح الـ profile التاني بالمحرك نفسه من غير -app، يعني بهوية Firefox (بياناته وقاعدة الـ profiles
 //   بتاعته). Kivo.exe بيحط KIVO_APP_FILE، و execProcess بيبعته -app.
+// - المسح: زرار المسح على كارت profile تاني في صفحة الاختيار بيمسحه من مكانه، من غير ما يفتحه (onDeleteProfile تحت).
 // شكل الصفحات نفسها في kivo/profiles (jar.mn).
 //
 // Firefox مالوش hooks للحاجات دي، فبنغيّر 4 methods في SelectableProfileService (hook تحت). لو Firefox غيّر أساميهم،
@@ -29,6 +30,9 @@ const AVATAR_PREF = "kivo.profiles.avatar";
 const NAMED_PREF = "kivo.profiles.named";
 const AVATAR_SIZE = 256;
 const EMOJI_FONT = '"Segoe UI Emoji", "Segoe UI Symbol", sans-serif';
+const PICKER = "about:profilemanager";
+// كلام صفحة المسح بتاعة Firefox (about:deleteprofile).
+const PROFILES_L10N = ["branding/brand.ftl", "browser/profiles.ftl"];
 
 function rgbString(hex) {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -162,6 +166,102 @@ async function syncAvatar(profile) {
   }
 }
 
+// ---------- المسح من صفحة الاختيار ----------
+// Firefox بيمسح الـ profile من جواه بس: زرار المسح على الكارت بيفتح الـ profile ده بصفحة about:deleteprofile (عدد
+// النوافذ والتابات والـ bookmarks...)، وتأكيد المسح هناك بيقفله. فالولد بيدوس "Delete" والـ profile بيتفتح. Kivo بيمسح
+// الـ profile المقفول من مكانه: تأكيد بكلام صفحة Firefox، وبعدين deleteProfile بتاع Firefox (الفولدرات وقاعدة البيانات).
+// الـ profile ده نفسه، أو المفتوح في نافذة، بيفضلوا بصفحة Firefox، لأن مسحهم لازم يقفلهم. وكمان صفحة الاختيار اللي
+// بتظهر و Kivo بيفتح، لأن لسه مفيش profile شغال (deleteProfile محتاجه).
+
+/** الـ profile مفتوح في نافذة؟ زي #notifyRunningInstances: الرسالة بتوصل بس لو هو شغال، وبتخليه يقرا قاعدة البيانات تاني. */
+function isOpen(profile) {
+  try {
+    lazy.SelectableProfileService.sendCommandLine(profile.path, ["--profiles-updated"], false);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** DeleteProfile من كارت في صفحة الاختيار، قبل profile-selector اللي بيفتح الـ profile. */
+function onDeleteProfile(event) {
+  const S = lazy.SelectableProfileService;
+  const profile = event.detail;
+  if (!S.currentProfile || !profile || profile.id === S.currentProfile.id || isOpen(profile)) {
+    return;
+  }
+  event.stopImmediatePropagation();
+  deleteClosedProfile(event.currentTarget, profile).catch(e => console.error("Kivo profiles:", e));
+}
+
+async function deleteClosedProfile(win, profile) {
+  const S = lazy.SelectableProfileService;
+  const [title, description, ...rest] = await new Localization(PROFILES_L10N).formatValues([
+    { id: "delete-profile-header-2", args: { profilename: profile.name } },
+    "delete-profile-description",
+    "delete-profile-bookmarks",
+    "delete-profile-history",
+    "delete-profile-autofill",
+    "delete-profile-logins",
+    "delete-profile-confirm",
+    "delete-profile-cancel",
+  ]);
+  const [confirm, cancel] = rest.splice(-2);
+  const P = Services.prompt;
+  // Cancel هو الافتراضي، عشان Enter مايمسحش. و useTitle بيخلي السؤال عنوان التأكيد بدل "Kivo".
+  const result = await P.asyncConfirmEx(
+    win.browsingContext,
+    P.MODAL_TYPE_TAB,
+    title,
+    [description, ...rest.map(item => `• ${item}`)].join("\n"),
+    P.BUTTON_POS_0 * P.BUTTON_TITLE_IS_STRING + P.BUTTON_POS_1 * P.BUTTON_TITLE_IS_STRING + P.BUTTON_POS_1_DEFAULT,
+    confirm,
+    cancel,
+    null,
+    null,
+    false,
+    { useTitle: true }
+  );
+  if (result.get("buttonNumClicked") !== 0) {
+    return;
+  }
+  if (isOpen(profile)) {
+    // اتفتح والتأكيد ظاهر: صفحة Firefox جواه.
+    S.launchInstance(profile, ["about:deleteprofile"]);
+    return;
+  }
+
+  const avatar = profile.hasCustomAvatar ? { name: profile.avatar, path: profile.getAvatarPath() } : null;
+  // Kivo بيفتح على الـ profile الافتراضي، فلازم مايبقاش اللي هيتمسح.
+  await S.setDefaultProfileForGroup();
+  await S.deleteProfile(profile);
+  const profiles = await S.getAllProfiles();
+  // الأفاتار اللي Kivo رسمه (syncAvatar) في فولدر مشترك، ومحدش بيمسحه.
+  if (avatar && !profiles.some(p => p.avatar === avatar.name)) {
+    await IOUtils.remove(avatar.path, { ignoreAbsent: true });
+  }
+
+  // profile-selector بيقرا الـ profiles مرة واحدة، والكارت بياخد صورته أول مرة بس: لستة فاضية الأول، فالكروت بتتعمل
+  // من جديد بدل ما كارت ياخد profile التاني بصورة القديم.
+  const selector = win.closed ? null : win.document.querySelector("profile-selector");
+  if (selector) {
+    selector.profiles = [];
+    await selector.updateComplete;
+    selector.profiles = profiles;
+  }
+}
+
+function watchPicker() {
+  Services.obs.addObserver(doc => {
+    if (doc.documentURI === PICKER && doc.defaultView) {
+      // capture على النافذة: قبل الـ listener بتاع profile-selector على الـ document.
+      doc.defaultView.addEventListener("DeleteProfile", onDeleteProfile, true);
+    }
+  }, "document-element-inserted");
+}
+
+// ---------- الاسم واللون والأفاتار ----------
+
 let queue = Promise.resolve();
 
 /** الاسم واللون والأفاتار بتوع الـ profile ده في قاعدة البيانات، لو اتغيروا. بالدور، عشان التغييرات ماتتداخلش. */
@@ -189,6 +289,7 @@ export const KivoProfiles = {
   /** category browser-before-ui-startup: قبل أول نافذة، عشان أول تحديث لثيم Firefox يلاقي الـ hooks. */
   init() {
     hook(lazy.SelectableProfileService);
+    watchPicker();
 
     // تغييرات من الـ instance ده أو من instance تاني (الاسم من صفحة التعديل مثلًا)، والثيم، والأفاتار من صفحة البداية.
     Services.obs.addObserver(sync, "sps-profiles-updated");

@@ -11,7 +11,12 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SelectableProfileService: "resource:///modules/profiles/SelectableProfileService.sys.mjs",
+  SessionStore: "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+  KivoWorkspaces: "moz-src:///browser/components/kivo/KivoWorkspaces.sys.mjs",
+  clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
 const THEME_PREF = "kivo.theme";
@@ -215,6 +220,24 @@ const oneOfInt = (...values) => value => Number.isInteger(value) && values.inclu
 const bool = value => typeof value === "boolean";
 const text = max => value => typeof value === "string" && value.length <= max;
 const name = value => typeof value === "string" && NAME.test(value);
+const GUID = /^[A-Za-z0-9_-]{12}$/;
+const guid = value => typeof value === "string" && GUID.test(value);
+// قايمة المهام: سطر لكل مهمة، "[ ] " أو "[x] " وبعدها الكلام، و 50 بالكتير (web/ui/src/widgets/tasks.ts).
+const TASK = /^\[[ x]\] [^\r\n]{1,200}$/;
+const tasks = value => typeof value === "string" && value.length <= 10_500 && (value === "" || (value.split("\n").length <= 50 && value.split("\n").every(line => TASK.test(line))));
+const CURRENCY = /^[A-Z]{3}$/;
+const currency = value => typeof value === "string" && CURRENCY.test(value);
+const feedUrl = value => typeof value === "string" && value.length <= 500 && webUrl(value) !== null;
+
+/** عنوان http أو https من غير اسم ولا باسورد جواه، أو null. */
+function webUrl(text, base = undefined) {
+  try {
+    const url = new URL(text, base);
+    return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password ? url : null;
+  } catch {
+    return null;
+  }
+}
 
 // كل نوع والخانات المسموحة في الـ settings بتاعته، زي PageWidgets.Types و web/ui/src/widgets/registry.ts.
 const WIDGET_TYPES = {
@@ -261,10 +284,18 @@ const WIDGET_TYPES = {
   },
   fact: {},
   note: { title: text(40), text: text(600) },
-  search: {},
+  continue: { show: oneOf("closed", "recent", "top") },
+  bookmarks: { folder: guid },
+  tasks: { title: text(40), tasks },
+  workspaces: {},
+  downloads: {},
+  weather: { city: name, unit: oneOf("c", "f") },
+  rates: { from: currency, to: currency },
+  news: { feed: feedUrl },
+  search: { simple: bool },
   hero: {},
   greeting: {},
-  shortcuts: {},
+  shortcuts: { source: oneOf("favorites", "top"), showTitle: bool },
   buddy: {},
 };
 
@@ -342,6 +373,67 @@ async function writeJson(file, value) {
   await IOUtils.writeJSON(kivoPath(file), value, { tmpPath: kivoPath(`${file}.tmp`) });
 }
 
+// ---------- Saved home presets (per profile) ----------
+
+const HOME_PRESETS_FILE = "home-presets.json";
+const HOME_PRESET_ID = /^(original-home|previous-home|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+
+function cleanPresetHome(raw) {
+  const base = storedTheme() ?? { version: 1, preset: "clean", mode: "light", accent: "#7964bc", font: "readex", corners: "round", background: { kind: "color", color: "#f5f4f0" }, start: {}, sites: "theme" };
+  return cleanTheme({ ...base, home: raw ?? {} }, true).home;
+}
+
+function cleanHomePreset(raw, id, createdAt = Date.now()) {
+  if (!isObject(raw) || typeof raw.name !== "string" || !Array.isArray(raw.widgets)) throw new Error("Invalid home preset");
+  const name = trimText(raw.name, 48);
+  if (!name) throw new Error("Give your preset a name.");
+  return {
+    id, name, home: cleanPresetHome(raw.home),
+    widgets: cleanWidgets(raw.widgets).filter(widget => widget.x !== undefined),
+    createdAt, updatedAt: Date.now(),
+  };
+}
+
+async function homePresets(current = null) {
+  if (!await IOUtils.exists(kivoPath(HOME_PRESETS_FILE))) {
+    const widgets = await readJson("widgets.json") ?? current?.widgets;
+    const presets = Array.isArray(widgets)
+      ? [cleanHomePreset({ name: "My home", widgets, home: storedTheme()?.home ?? current?.home }, "original-home")]
+      : [];
+    await writeJson(HOME_PRESETS_FILE, presets);
+    return presets;
+  }
+  const raw = await readJson(HOME_PRESETS_FILE);
+  if (!Array.isArray(raw)) throw new Error("Could not read your saved home presets.");
+  const ids = new Set();
+  return raw.slice(0, 51).map(preset => {
+    if (!HOME_PRESET_ID.test(preset?.id) || ids.has(preset.id)) throw new Error("Invalid saved home preset");
+    ids.add(preset.id);
+    const cleaned = cleanHomePreset(preset, preset.id, preset.createdAt);
+    return { ...cleaned, updatedAt: preset.updatedAt };
+  });
+}
+
+async function saveHomePreset(raw) {
+  const presets = await homePresets();
+  const existing = presets.find(preset => preset.id === raw?.id);
+  if (raw?.id && (!existing || existing.id === "previous-home")) throw new Error("That saved preset is not available.");
+  if (!existing && presets.filter(preset => preset.id !== "previous-home").length >= 50) throw new Error("You can save up to 50 home presets.");
+  const id = existing?.id ?? Services.uuid.generateUUID().toString().slice(1, -1);
+  const preset = cleanHomePreset(raw, id, existing?.createdAt);
+  const saved = existing ? presets.map(item => item.id === id ? preset : item) : [...presets, preset];
+  await writeJson(HOME_PRESETS_FILE, saved);
+  return { presets: saved };
+}
+
+async function deleteHomePreset(id) {
+  const presets = await homePresets();
+  if (!presets.some(preset => preset.id === id)) throw new Error("That saved preset is not available.");
+  const saved = presets.filter(preset => preset.id !== id);
+  await writeJson(HOME_PRESETS_FILE, saved);
+  return { presets: saved };
+}
+
 // ---------- الـ profile ----------
 
 /** اسم حساب Windows بحرف كبير في الأول، اسم أول profile. */
@@ -385,8 +477,18 @@ async function writeAvatar(avatar) {
 
 // ---------- الصور ----------
 
+// Draft photos belong to the tab and its Appearance session. Picking or canceling never replaces a saved file.
+const appearancePhotos = new WeakMap();
+
+function appearanceSession(payload) {
+  if (typeof payload.session !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payload.session)) {
+    throw new Error("Invalid appearance session");
+  }
+  return payload.session;
+}
+
 /** صورة من الجهاز، بنفس طريقة WebView2: الأفاتار 256×256 PNG، والخلفية JPEG أطول ضلع فيها 2560. null لو الولد لغى. */
-async function pickPhoto(browser, file, { size, cover, type }) {
+async function pickPhoto(browser, file, { size, cover, type }, session = null) {
   const win = browserWindow(browser);
   const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
   picker.init(win.browsingContext, "Choose a photo", Ci.nsIFilePicker.modeOpen);
@@ -397,6 +499,7 @@ async function pickPhoto(browser, file, { size, cover, type }) {
   }
 
   const bytes = await IOUtils.read(picker.file.path);
+  if (bytes.length > 40 * 1024 * 1024) throw new Error("Pick a photo under 40 MB.");
   const bitmap = await win.createImageBitmap(new win.Blob([bytes]));
   let width;
   let height;
@@ -424,23 +527,109 @@ async function pickPhoto(browser, file, { size, cover, type }) {
   context.drawImage(bitmap, sx, sy, sw, sh, 0, 0, width, height);
   bitmap.close();
   const blob = await new Promise(resolve => canvas.toBlob(resolve, type, 0.88));
+  const output = new Uint8Array(await blob.arrayBuffer());
+  const version = Date.now();
+  if (session) {
+    let draft = appearancePhotos.get(browser);
+    if (draft?.session !== session) {
+      draft = { session, photos: new Map() };
+      appearancePhotos.set(browser, draft);
+    }
+    draft.photos.set(file, { version, bytes: output });
+    return { version, url: bytesDataUrl(output, type) };
+  }
   await IOUtils.makeDirectory(kivoPath(), { ignoreExisting: true });
-  await IOUtils.write(kivoPath(file), new Uint8Array(await blob.arrayBuffer()), { tmpPath: kivoPath(`${file}.tmp`) });
-  return Date.now();
+  await IOUtils.write(kivoPath(file), output, { tmpPath: kivoPath(`${file}.tmp`) });
+  return version;
+}
+
+function bytesDataUrl(bytes, mime) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
 }
 
 async function fileDataUrl(file, mime) {
   try {
     const bytes = await IOUtils.read(kivoPath(file));
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    }
-    return `data:${mime};base64,${btoa(binary)}`;
+    return bytesDataUrl(bytes, mime);
   } catch {
     return null;
   }
 }
+
+async function saveAppearance(payload, browser, homePreset = false) {
+  const session = appearanceSession(payload);
+  const theme = cleanTheme(payload.theme, true);
+  const current = await readProfile();
+  const raw = payload.avatar;
+  let avatar;
+  if (raw?.kind === "initial") {
+    avatar = { kind: "initial" };
+  } else if (raw?.kind === "emoji" && typeof raw.emoji === "string" && raw.emoji.trim() && raw.emoji.length <= 16) {
+    avatar = { kind: "emoji", emoji: raw.emoji };
+  } else if (raw?.kind === "photo" && Number.isSafeInteger(raw.version) && raw.version > 0) {
+    avatar = { kind: "photo", version: raw.version };
+  } else {
+    throw new Error("Invalid avatar");
+  }
+  const draft = appearancePhotos.get(browser);
+  const photos = draft?.session === session ? draft.photos : new Map();
+  const writes = new Map();
+  for (const [file, selected, existing] of [
+    ["avatar.png", avatar, current.avatar],
+    ["background.jpg", theme.background, storedTheme()?.background],
+  ]) {
+    if (selected.kind !== "photo") continue;
+    const photo = photos.get(file);
+    if (photo?.version === selected.version) {
+      writes.set(file, photo.bytes);
+    } else if (existing?.kind !== "photo" || existing.version !== selected.version) {
+      throw new Error("That photo preview has expired. Choose it again.");
+    }
+  }
+  const profile = (await readJson("profile.json")) ?? {};
+  const encode = value => new TextEncoder().encode(JSON.stringify(value));
+  writes.set("profile.json", encode({ ...profile, avatar }));
+  const widgets = payload.widgets === undefined ? undefined : cleanWidgets(payload.widgets);
+  if (widgets) writes.set("widgets.json", encode(widgets));
+  if (homePreset) {
+    if (!widgets) throw new Error("Missing home layout widgets");
+    const presets = await homePresets(payload.previous);
+    const previous = cleanHomePreset({
+      name: "Previous home", home: storedTheme()?.home ?? payload.previous?.home,
+      widgets: await readJson("widgets.json") ?? payload.previous?.widgets ?? [],
+    }, "previous-home");
+    writes.set(HOME_PRESETS_FILE, encode([...presets.filter(preset => preset.id !== "previous-home"), previous]));
+  }
+  const originals = new Map();
+  for (const file of writes.keys()) {
+    originals.set(file, await IOUtils.exists(kivoPath(file)) ? await IOUtils.read(kivoPath(file)) : null);
+  }
+  const oldTheme = Services.prefs.getStringPref(THEME_PREF, "");
+  await IOUtils.makeDirectory(kivoPath(), { ignoreExisting: true });
+  try {
+    for (const [file, bytes] of writes) {
+      await IOUtils.write(kivoPath(file), bytes, { tmpPath: kivoPath(`${file}.tmp`) });
+    }
+    Services.prefs.setStringPref(THEME_PREF, JSON.stringify(theme));
+  } catch (error) {
+    for (const [file, bytes] of originals) {
+      if (bytes === null) await IOUtils.remove(kivoPath(file), { ignoreAbsent: true });
+      else await IOUtils.write(kivoPath(file), bytes, { tmpPath: kivoPath(`${file}.tmp`) });
+    }
+    if (oldTheme) Services.prefs.setStringPref(THEME_PREF, oldTheme);
+    else Services.prefs.clearUserPref(THEME_PREF);
+    throw error;
+  }
+  if (appearancePhotos.get(browser) === draft) appearancePhotos.delete(browser);
+  Services.obs.notifyObservers(null, "kivo-profile-changed");
+  return { theme, profile: await readProfile(), ...(widgets ? { widgets } : {}) };
+}
+
+let appearanceSaveQueue = Promise.resolve();
 
 const HOST = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/i;
 
@@ -667,6 +856,408 @@ async function downloadAction(type, payload) {
   return downloadsList();
 }
 
+// ---------- كمّل من مكانك ----------
+// widget الـ continue: التابات اللي اتقفلت زي "Recently closed" في Firefox View، وآخر الصفحات اللي اتفتحت.
+
+const WORKSPACE_KEY = "kivo-workspace";
+// صفحات الويب بس في الاستعلامات. Sqlite.sys.mjs بيرفض LIKE بنص ثابت، فالأنماط bindings.
+const WEB = { http: "http://%", https: "https://%" };
+
+/**
+ * الأحدث الأول. تابات نافذة workspace اتقفلت مش منهم: دي لسه محفوظة في الـ workspace نفسها (KivoWorkspaces).
+ * والنافذة الخاصة تاباتها بس، لأن التاب مايتنقلش بين الخاص والعادي.
+ * من Firefox 159 النافذة لازم تتبعت { sourceWindow }: النافذة لوحدها بقت بتتجاهل، والقايمة كانت بترجع فاضية.
+ */
+function closedTabs(win) {
+  const tabs = lazy.SessionStore.getClosedTabData({ sourceWindow: win });
+  if (!lazy.PrivateBrowsingUtils.isWindowPrivate(win) && Services.prefs.getBoolPref("browser.sessionstore.closedTabsFromClosedWindows", true)) {
+    const workspaces = new Set(lazy.SessionStore.getClosedWindowData().filter(w => w.extData?.[WORKSPACE_KEY]).map(w => w.closedId));
+    tabs.push(...lazy.SessionStore.getClosedTabDataFromClosedWindows().filter(tab => !workspaces.has(tab.sourceClosedId)));
+  }
+  return tabs.sort((a, b) => b.closedAt - a.closedAt);
+}
+
+/** الصفحة اللي كان التاب واقف عليها. */
+function closedTabUrl(tab) {
+  const entries = tab.state?.entries ?? [];
+  const index = Math.min(Math.max((tab.state?.index ?? entries.length) - 1, 0), entries.length - 1);
+  return entries[index]?.url ?? "";
+}
+
+function sessionsClosed(browser, payload) {
+  const limit = isInt(payload.limit, 1, 50) ? payload.limit : 20;
+  const items = [];
+  for (const tab of closedTabs(browserWindow(browser))) {
+    const url = closedTabUrl(tab);
+    // صفحة البداية نفسها وصفحات المتصفح مش منهم.
+    if (!/^https?:/.test(url)) {
+      continue;
+    }
+    items.push({ id: tab.closedId, url, title: trimText(tab.title || url, 200), closedAt: tab.closedAt });
+    if (items.length === limit) {
+      break;
+    }
+  }
+  return { items };
+}
+
+/**
+ * التاب بيرجع زي ما كان، بالـ back والـ forward بتوعه. لو صفحة البداية في تاب جديد فاضي، التاب ده نفسه بيبقى اللي
+ * اتقفل (زي Ctrl+Shift+T من تاب فاضي، من غير تاب زيادة)، وإلا بيفتح في تاب جديد.
+ */
+function sessionsReopen(browser, payload) {
+  const win = browserWindow(browser);
+  const closed = isInt(payload.id, 0, Number.MAX_SAFE_INTEGER) ? closedTabs(win).find(tab => tab.closedId === payload.id) : null;
+  if (!closed) {
+    throw new Error("No such closed tab");
+  }
+  const source = closed.sourceClosedId === undefined ? {} : { sourceClosedId: closed.sourceClosedId };
+  const home = win.gBrowser?.getTabForBrowser(browser);
+  const fresh = home && !home.pinned && !browser.canGoBack && !browser.canGoForward;
+  if (fresh && !closed.state.pinned && (closed.state.userContextId ?? 0) === home.userContextId) {
+    lazy.SessionStore.setTabState(home, closed.state);
+    lazy.SessionStore.forgetClosedTabById(closed.closedId, source);
+  } else if (closed.sourceClosedId === undefined) {
+    lazy.SessionStore.undoCloseById(closed.closedId, false, win);
+  } else {
+    lazy.SessionStore.undoClosedTabFromClosedWindow(source, closed.closedId, win);
+  }
+  return null;
+}
+
+/** آخر الصفحات اللي اتفتحت في آخر 30 يوم، كل صفحة مرة واحدة بآخر زيارة ليها. */
+async function sitesRecent(payload) {
+  const limit = isInt(payload.limit, 1, 50) ? payload.limit : 20;
+  const db = await lazy.PlacesUtils.promiseDBConnection();
+  const rows = await db.executeCached(
+    `SELECT h.url, h.title, MAX(v.visit_date) AS visited
+       FROM moz_historyvisits v JOIN moz_places h ON h.id = v.place_id
+      WHERE v.visit_type NOT IN (${HIDDEN_VISITS}) AND h.hidden = 0 AND v.visit_date > :since
+        AND (h.url LIKE :http OR h.url LIKE :https)
+      GROUP BY h.id
+      ORDER BY visited DESC
+      LIMIT :limit`,
+    { since: (Date.now() - 30 * 86_400_000) * 1000, limit, ...WEB }
+  );
+  return {
+    items: rows.map(row => ({
+      url: row.getResultByName("url"),
+      title: trimText(row.getResultByName("title") ?? "", 200),
+      visitedAt: Math.floor(row.getResultByName("visited") / 1000),
+    })),
+  };
+}
+
+// ---------- فولدر bookmarks ----------
+// widget الـ bookmarks بيعرض فولدر واحد. قراية بس: إدارة الـ bookmarks بتفضل مكتبة Firefox.
+
+/** عدد اللينكات اللي الـ widget بيعرضها جوه فولدر: http و https بس، من غير bookmarklets. */
+const linksIn = parent => `(SELECT count(*) FROM moz_bookmarks c JOIN moz_places p ON p.id = c.fk
+              WHERE c.parent = ${parent} AND c.type = 1 AND (p.url LIKE :http OR p.url LIKE :https))`;
+
+function folderTitle(guid, title) {
+  return trimText(lazy.PlacesUtils.bookmarks.getLocalizedTitle({ guid, title: title ?? "" }) || "Untitled folder", 80);
+}
+
+/** كل الفولدرات للاختيار، بالترتيب اللي في المكتبة: الـ toolbar الأول، والـ mobile لو فيه حاجة بس. */
+async function bookmarkFolders() {
+  const db = await lazy.PlacesUtils.promiseDBConnection();
+  const rows = await db.executeCached(
+    `WITH RECURSIVE tree(id, guid, title, depth, path) AS (
+       SELECT id, guid, title, 0,
+              CASE guid WHEN 'toolbar_____' THEN '0' WHEN 'menu________' THEN '1' WHEN 'unfiled_____' THEN '2' ELSE '3' END
+         FROM moz_bookmarks WHERE guid IN ('toolbar_____', 'menu________', 'unfiled_____', 'mobile______')
+       UNION ALL
+       SELECT b.id, b.guid, b.title, t.depth + 1, t.path || '/' || printf('%06d', b.position)
+         FROM moz_bookmarks b JOIN tree t ON b.parent = t.id
+        WHERE b.type = 2 AND t.depth < 8
+     )
+     SELECT guid, title, depth,
+            ${linksIn("tree.id")} AS links,
+            (SELECT count(*) FROM moz_bookmarks c WHERE c.parent = tree.id) AS children
+       FROM tree ORDER BY path LIMIT 500`,
+    WEB
+  );
+  return {
+    items: rows
+      .filter(row => row.getResultByName("guid") !== "mobile______" || row.getResultByName("children") > 0)
+      .map(row => ({
+        id: row.getResultByName("guid"),
+        title: folderTitle(row.getResultByName("guid"), row.getResultByName("title")),
+        depth: row.getResultByName("depth"),
+        count: row.getResultByName("links"),
+      })),
+  };
+}
+
+/** اللي جوه فولدر بترتيبه: لينكات http و https، وفولدرات. من غير الـ tags، ولا bookmarklets. */
+async function bookmarkFolder(payload) {
+  const db = await lazy.PlacesUtils.promiseDBConnection();
+  const [folder] = await db.executeCached(
+    `SELECT id, guid, title FROM moz_bookmarks
+      WHERE guid = :guid AND type = 2 AND guid NOT IN ('root________', 'tags________')
+        AND parent <> (SELECT id FROM moz_bookmarks WHERE guid = 'tags________')`,
+    { guid: guid(payload.id) ? payload.id : "toolbar_____" }
+  );
+  if (!folder) {
+    throw new Error("No such folder");
+  }
+  const rows = await db.executeCached(
+    `SELECT b.guid, b.type, b.title, h.url,
+            ${linksIn("b.id")} AS links
+       FROM moz_bookmarks b LEFT JOIN moz_places h ON h.id = b.fk
+      WHERE b.parent = :id AND b.type IN (1, 2)
+      ORDER BY b.position LIMIT 200`,
+    { id: folder.getResultByName("id"), ...WEB }
+  );
+  const items = [];
+  for (const row of rows) {
+    if (row.getResultByName("type") === 2) {
+      items.push({ kind: "folder", id: row.getResultByName("guid"), title: folderTitle(row.getResultByName("guid"), row.getResultByName("title")), count: row.getResultByName("links") });
+    } else if (/^https?:/.test(row.getResultByName("url") ?? "")) {
+      items.push({ kind: "link", url: row.getResultByName("url"), title: trimText(row.getResultByName("title") ?? "", 200) });
+    }
+  }
+  return { id: folder.getResultByName("guid"), title: folderTitle(folder.getResultByName("guid"), folder.getResultByName("title")), items };
+}
+
+// ---------- الـ workspaces ----------
+// widget الـ workspaces: نفس اللي في قايمة الـ workspaces (KivoWorkspaces)، ودوسة بتفتح الـ workspace أو بتروح لنافذتها.
+
+const WORKSPACE_ID = /^[a-z0-9]{6,24}$/;
+
+async function workspacesList(browser) {
+  const here = browserWindow(browser)?.kivoWorkspaceId;
+  const list = await lazy.KivoWorkspaces.list();
+  return { items: list.map(ws => ({ id: ws.id, name: ws.name, color: ws.color, tabs: ws.tabs, open: ws.here, current: ws.id === here })) };
+}
+
+/** قايمة الـ workspaces نفسها، من زرارها في النافذة دي (لو الولد ماشالوش من الأدوات). */
+function workspacesManage(browser) {
+  const win = browserWindow(browser);
+  const button = win?.document.querySelector("#kivo-workspaces-button .kivo-ws-button");
+  if (button?.checkVisibility()) {
+    lazy.KivoWorkspaces.togglePanel(win, button);
+  }
+}
+
+// ---------- من النت ----------
+// widgets الطقس والعملات والأخبار. الصفحة مابتطلبش من النت بنفسها: الـ host بيطلب عناوين معروفة بس (والـ feed اللي
+// الولد كتبه)، من غير cookies، وبيرجّع قيم متنضفة مش الرد نفسه. وكل رد بيفضل في الذاكرة شوية، فالتاب الجديد
+// مابيطلبش تاني. العناوين من prefs عشان الاختبار يدّي سيرفر محلي (widgets-check.mjs).
+
+const WEATHER_PREF = "kivo.widgets.weatherUrl";
+const RATES_PREF = "kivo.widgets.ratesUrls";
+const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
+// fawazahmed0/exchange-api (CC0، من غير مفتاح): jsDelivr، والتاني لو الأول وقع. {date} هو latest أو YYYY-MM-DD.
+const RATES_URLS = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{date}/v1/currencies/{base}.json https://{date}.currency-api.pages.dev/v1/currencies/{base}.json";
+const MAX_BYTES = 3_000_000;
+const MAX_CACHED = 60;
+
+const netCache = new Map();
+
+/** نفس المفتاح في الوقت ده بيرجع نفس الرد (حتى لو لسه جاي). الغلط مابيتحفظش. */
+function cached(key, ttl, load) {
+  const hit = netCache.get(key);
+  if (hit && Date.now() - hit.at < ttl) {
+    return hit.value;
+  }
+  const value = load().catch(e => {
+    netCache.delete(key);
+    throw e;
+  });
+  netCache.set(key, { at: Date.now(), value });
+  if (netCache.size > MAX_CACHED) {
+    netCache.delete(netCache.keys().next().value);
+  }
+  return value;
+}
+
+/** نص الرد، في 10 ثواني و 3 MB بالكتير، من غير cookies. */
+async function download(url, accept) {
+  const controller = new AbortController();
+  const timer = lazy.setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", headers: { Accept: accept }, signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    if (Number(response.headers.get("content-length")) > MAX_BYTES) {
+      throw new Error("Too big");
+    }
+    const body = await response.text();
+    if (body.length > MAX_BYTES) {
+      throw new Error("Too big");
+    }
+    return { body, url: response.url || url };
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "Timed out" : String(e?.message ?? e));
+  } finally {
+    lazy.clearTimeout(timer);
+  }
+}
+
+const finite = value => (Number.isFinite(value) ? value : null);
+const round1 = value => (Number.isFinite(value) ? Math.round(value * 10) / 10 : null);
+
+/** الجو دلوقتي والأيام الجاية، بالـ WMO codes بتاعة Open-Meteo. الإحداثيات بتتقرّب لحد 2 بعد العلامة. */
+function weatherGet(payload) {
+  const lat = Number(payload.lat);
+  const lon = Number(payload.lon);
+  if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) {
+    throw new Error("Invalid place");
+  }
+  const unit = payload.unit === "f" ? "f" : "c";
+  const query = new URLSearchParams({
+    latitude: lat.toFixed(2),
+    longitude: lon.toFixed(2),
+    current: "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m",
+    daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+    timezone: "auto",
+    forecast_days: "6",
+    temperature_unit: unit === "f" ? "fahrenheit" : "celsius",
+    wind_speed_unit: unit === "f" ? "mph" : "kmh",
+  });
+  const base = Services.prefs.getStringPref(WEATHER_PREF, WEATHER_URL);
+  return cached(`weather ${query}`, 20 * 60_000, async () => {
+    const data = JSON.parse((await download(`${base}?${query}`, "application/json")).body);
+    const current = data.current ?? {};
+    const daily = data.daily ?? {};
+    const days = (Array.isArray(daily.time) ? daily.time : []).slice(0, 6).map((date, i) => ({
+      date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "",
+      code: Number.isInteger(daily.weather_code?.[i]) ? daily.weather_code[i] : null,
+      max: round1(daily.temperature_2m_max?.[i]),
+      min: round1(daily.temperature_2m_min?.[i]),
+      rain: finite(daily.precipitation_probability_max?.[i]),
+    }));
+    if (!Number.isFinite(current.temperature_2m)) {
+      throw new Error("No weather for this place");
+    }
+    return {
+      unit,
+      current: {
+        temp: round1(current.temperature_2m),
+        feels: round1(current.apparent_temperature),
+        humidity: finite(current.relative_humidity_2m),
+        wind: round1(current.wind_speed_10m),
+        code: Number.isInteger(current.weather_code) ? current.weather_code : null,
+        day: current.is_day !== 0,
+      },
+      days,
+      updatedAt: Date.now(),
+    };
+  });
+}
+
+/** أسعار كل العملات قصاد base في يوم (latest أو YYYY-MM-DD)، من أول عنوان يرد. */
+async function ratesOn(base, date) {
+  const urls = Services.prefs.getStringPref(RATES_PREF, RATES_URLS).split(/\s+/).filter(Boolean);
+  let error = null;
+  for (const template of urls) {
+    try {
+      const url = template.replaceAll("{date}", date).replaceAll("{base}", base.toLowerCase());
+      const data = JSON.parse((await download(url, "application/json")).body);
+      const table = data?.[base.toLowerCase()];
+      if (!isObject(table) || !/^\d{4}-\d{2}-\d{2}$/.test(data.date ?? "")) {
+        throw new Error("Not a rates table");
+      }
+      const rates = {};
+      for (const [code, rate] of Object.entries(table)) {
+        if (/^[a-z]{3}$/.test(code) && Number.isFinite(rate) && rate > 0) {
+          rates[code.toUpperCase()] = rate;
+        }
+      }
+      return { date: data.date, rates };
+    } catch (e) {
+      error = e;
+    }
+  }
+  throw error ?? new Error("No rates");
+}
+
+/** النهارده وامبارح، عشان الـ widget يقول السعر طلع ولا نزل. امبارح لو مارجعش بيبقى null. */
+function ratesGet(payload) {
+  const base = currency(payload.base) ? payload.base : "USD";
+  return cached(`rates ${base}`, 3 * 3_600_000, async () => {
+    const today = await ratesOn(base, "latest");
+    const day = new Date(`${today.date}T12:00:00Z`);
+    day.setUTCDate(day.getUTCDate() - 1);
+    const before = await ratesOn(base, day.toISOString().slice(0, 10)).catch(() => null);
+    return { base, date: today.date, rates: today.rates, previous: before?.rates ?? null, updatedAt: Date.now() };
+  });
+}
+
+const childNamed = (el, name) => [...(el?.children ?? [])].find(c => c.localName === name) ?? null;
+// العناوين ساعات فيها HTML جوه CDATA: الكلام بس.
+const plain = (text, max) => trimText(String(text ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " "), max);
+
+/** RSS 2.0 و RSS 1.0 و Atom: العنوان، وموقعه، وأول 30 خبر (عنوان ولينك http أو https وتاريخ). */
+function parseFeed(xml, from) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const root = doc.documentElement;
+  if (!root || root.localName === "parsererror" || doc.getElementsByTagName("parsererror").length) {
+    return null;
+  }
+  const channel = childNamed(root, "channel") ?? root;
+  const linkOf = el => {
+    const links = [...el.children].filter(c => c.localName === "link");
+    const atom = links.find(l => l.getAttribute("href") && (!l.getAttribute("rel") || l.getAttribute("rel") === "alternate"));
+    const href = atom?.getAttribute("href") ?? links.find(l => !l.getAttribute("href"))?.textContent?.trim() ?? childNamed(el, "guid")?.textContent?.trim();
+    return href ? webUrl(href, from)?.href ?? null : null;
+  };
+  const dateOf = el => {
+    for (const name of ["pubDate", "published", "updated", "date"]) {
+      const time = Date.parse(childNamed(el, name)?.textContent?.trim() ?? "");
+      if (Number.isFinite(time)) {
+        return time;
+      }
+    }
+    return null;
+  };
+  const entries = [...root.getElementsByTagNameNS("*", "item"), ...root.getElementsByTagNameNS("*", "entry")];
+  if (!["rss", "RDF", "feed"].includes(root.localName)) {
+    return null;
+  }
+  const items = [];
+  for (const entry of entries) {
+    const url = linkOf(entry);
+    const title = plain(childNamed(entry, "title")?.textContent, 200);
+    if (url && title) {
+      items.push({ title, url, date: dateOf(entry) });
+    }
+    if (items.length === 30) {
+      break;
+    }
+  }
+  return { title: plain(childNamed(channel, "title")?.textContent, 80), site: linkOf(channel), items };
+}
+
+/** الـ feed، أو لو العنوان صفحة عادية الـ feed اللي بتعلن عنه (<link rel="alternate" type="application/rss+xml">). */
+function feedGet(payload) {
+  const url = typeof payload.url === "string" && payload.url.length <= 500 ? webUrl(payload.url) : null;
+  if (!url) {
+    throw new Error("Not a web address");
+  }
+  return cached(`feed ${url.href}`, 30 * 60_000, async () => {
+    const accept = "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.5";
+    const first = await download(url.href, accept);
+    let feed = parseFeed(first.body, first.url);
+    if (!feed) {
+      const html = new DOMParser().parseFromString(first.body, "text/html");
+      const link = [...html.querySelectorAll('link[rel~="alternate"][href]')].find(l => /(rss|atom)\+xml/.test(l.getAttribute("type") ?? ""));
+      const found = link ? webUrl(link.getAttribute("href"), first.url) : null;
+      if (found) {
+        const second = await download(found.href, accept);
+        feed = parseFeed(second.body, second.url);
+      }
+    }
+    if (!feed) {
+      throw new Error("No news feed at this address");
+    }
+    return { ...feed, title: feed.title || url.host, site: feed.site ?? url.origin, updatedAt: Date.now() };
+  });
+}
+
 // ---------- الرسايل ----------
 
 function systemMode(browser) {
@@ -691,6 +1282,29 @@ export async function handle(message, browser) {
       // KivoTheme بيسمع للـ pref، فكل النوافذ بتتلوّن على طول.
       Services.prefs.setStringPref(THEME_PREF, JSON.stringify(theme));
       return { theme };
+    }
+    case "appearance.save": {
+      const saved = appearanceSaveQueue.then(() => saveAppearance(payload, browser));
+      appearanceSaveQueue = saved.catch(() => {});
+      return saved;
+    }
+    case "homePresets.list":
+    case "homePresets.save":
+    case "homePresets.delete":
+    case "homePresets.apply": {
+      const saved = appearanceSaveQueue.then(async () => {
+        if (type === "homePresets.list") return { presets: await homePresets(payload.current) };
+        if (type === "homePresets.save") return saveHomePreset(payload.preset);
+        if (type === "homePresets.delete") return deleteHomePreset(payload.id);
+        return saveAppearance(payload, browser, true);
+      });
+      appearanceSaveQueue = saved.catch(() => {});
+      return saved;
+    }
+    case "appearance.cancel": {
+      const session = appearanceSession(payload);
+      if (appearancePhotos.get(browser)?.session === session) appearancePhotos.delete(browser);
+      return null;
     }
     case "tiles.get": {
       const tiles = await readJson("start.json");
@@ -733,10 +1347,16 @@ export async function handle(message, browser) {
       throw new Error("Invalid avatar");
     }
     case "avatar.pickPhoto": {
+      if (payload.preview === true) {
+        return pickPhoto(browser, "avatar.png", { size: 256, cover: true, type: "image/png" }, appearanceSession(payload));
+      }
       const version = await pickPhoto(browser, "avatar.png", { size: 256, cover: true, type: "image/png" });
       return version === null ? null : writeAvatar({ kind: "photo", version });
     }
     case "background.pickPhoto": {
+      if (payload.preview === true) {
+        return pickPhoto(browser, "background.jpg", { size: 2560, cover: false, type: "image/jpeg" }, appearanceSession(payload));
+      }
       const version = await pickPhoto(browser, "background.jpg", { size: 2560, cover: false, type: "image/jpeg" });
       return version === null ? null : { version };
     }
@@ -762,6 +1382,33 @@ export async function handle(message, browser) {
       await list.removeFinished();
       return downloadsList();
     }
+    case "sessions.closed":
+      return sessionsClosed(browser, payload);
+    case "sessions.reopen":
+      return sessionsReopen(browser, payload);
+    case "sites.recent":
+      return sitesRecent(payload);
+    case "bookmarks.folders":
+      return bookmarkFolders();
+    case "bookmarks.folder":
+      return bookmarkFolder(payload);
+    case "workspaces.list":
+      return workspacesList(browser);
+    case "workspaces.open":
+      if (typeof payload.id !== "string" || !WORKSPACE_ID.test(payload.id)) {
+        throw new Error("No such workspace");
+      }
+      await lazy.KivoWorkspaces.open(payload.id, browserWindow(browser));
+      return null;
+    case "workspaces.manage":
+      workspacesManage(browser);
+      return null;
+    case "weather.get":
+      return weatherGet(payload);
+    case "rates.get":
+      return ratesGet(payload);
+    case "feed.get":
+      return feedGet(payload);
     case "page.open": {
       // صفحة Kivo من صفحة Kivo (مثلًا "Show in History")، أو صفحة المتصفح دي بس.
       const pages = { history: "history.html", downloads: "downloads.html", clearData: "about:preferences#privacy" };
