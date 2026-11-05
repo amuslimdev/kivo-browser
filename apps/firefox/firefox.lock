@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/mozilla-firefox/firefox",
   "branch": "release",
-  "revision": "9a2dc53c369c7ae5172018b35988e1d2ffeff402",
-  "version": "159.0"
+  "revision": "6181e6b5f28a8fbae1d5c3ef6f6626b5a2180213",
+  "version": "159.0.1"
 }

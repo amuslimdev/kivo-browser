@@ -117,7 +117,9 @@ try {
           return items.length + ">" + after.items.length; })()`
       )
     : 'no page';
-  check('removing a download takes it off the list only', removed === '3>2', removed);
+  check('removing a download takes it off the list', removed === '3>2', removed);
+  const kept = await kivo.evaluate(`IOUtils.exists(PathUtils.join(PathUtils.tempDir, "my-drawing.png"))`);
+  check('removing a download keeps the file', kept === true, kept);
 
   // ---------- الـ History ----------
   const history = await json(`(async () => {

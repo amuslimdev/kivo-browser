@@ -8,7 +8,10 @@
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  DownloadHistory: "resource://gre/modules/DownloadHistory.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
+  DownloadsCommon: "moz-src:///browser/components/downloads/DownloadsCommon.sys.mjs",
+  FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
@@ -775,9 +778,14 @@ async function historyDelete(payload) {
 
 // ---------- التحميلات (G5) ----------
 // صفحة Downloads بتاعة Kivo (web/ui/src/Downloads.vue) بدل about:downloads. القايمة الصغيرة تحت السهم بتاعة Firefox.
+// اللستة نفس لستة about:downloads (DownloadHistory): الـ session الحالية، وقبلها اللي اتحفظ في الـ history. لستة
+// Downloads.getList لوحدها بتفضى لما Kivo يتقفل، لأن Firefox مابيحفظش فيها غير اللي لسه ماخلصش. والتحميل القديم
+// (HistoryDownload) مش Download كامل، مفيهوش launch ولا start، فالأوامر من DownloadsCommon زي صفحة Firefox.
 
 const downloadIds = new WeakMap();
 const downloadsById = new Map();
+// التحميلات القديمة اللي اتشاف ملفها: مرة واحدة، مش مع كل تحديث للصفحة.
+const checkedFiles = new WeakSet();
 let nextDownloadId = 1;
 
 function downloadId(download) {
@@ -789,12 +797,17 @@ function downloadId(download) {
   return downloadIds.get(download);
 }
 
+/** becauseBlocked مابيتحفظش في الـ history: التحميل القديم فيه سبب الحظر بس. */
+function isBlocked(error) {
+  return error.becauseBlocked || error.becauseBlockedByParentalControls || error.becauseBlockedByReputationCheck || error.becauseBlockedByContentAnalysis;
+}
+
 function downloadState(download) {
   if (download.succeeded) {
     return download.target.exists === false ? "missing" : "done";
   }
   if (download.error) {
-    return download.error.becauseBlocked ? "blocked" : "failed";
+    return isBlocked(download.error) ? "blocked" : "failed";
   }
   if (download.canceled) {
     return download.hasPartialData ? "paused" : "canceled";
@@ -803,20 +816,30 @@ function downloadState(download) {
 }
 
 async function downloadsList() {
-  const list = await lazy.Downloads.getList(lazy.Downloads.ALL);
+  const list = await lazy.DownloadHistory.getList();
   const all = await list.getAll();
+  // التحميل القديم بيتفرض إن ملفه موجود لحد ما يتعمله refresh.
+  const unchecked = all.filter(download => download.placesNode && !checkedFiles.has(download));
+  await Promise.all(
+    unchecked.map(download => {
+      checkedFiles.add(download);
+      return download.refresh();
+    })
+  );
   return {
     items: all
       .map(download => ({
         id: downloadId(download),
-        name: PathUtils.filename(download.target.path),
+        // التحميل القديم ممكن يكون من غير مسار، زي صفحة Firefox بيتعرض بالعنوان.
+        name: download.target.path ? PathUtils.filename(download.target.path) : download.source.url,
         url: download.source.url,
         size: download.totalBytes || download.target.size || 0,
         received: download.currentBytes || 0,
         progress: download.hasProgress ? download.progress : null,
         speed: download.speed || 0,
         state: downloadState(download),
-        startedAt: download.startTime ? download.startTime.getTime() : 0,
+        // التحميل القديم وقته في الـ history بالـ microseconds.
+        startedAt: download.startTime?.getTime() ?? (download.placesNode?.time ?? 0) / 1000,
       }))
       .sort((a, b) => b.startedAt - a.startedAt),
   };
@@ -830,28 +853,31 @@ function findDownload(payload) {
   return download;
 }
 
-async function downloadAction(type, payload) {
+async function downloadAction(type, payload, browser) {
   const download = findDownload(payload);
   switch (type) {
     case "downloads.open":
-      await download.launch();
+      await lazy.DownloadsCommon.openDownload(download);
       break;
     case "downloads.show":
-      await download.showContainingDirectory();
+      lazy.DownloadsCommon.showDownloadedFile(new lazy.FileUtils.File(download.target.path));
       break;
     case "downloads.retry":
-      download.start().catch(() => {});
+      if (download.start) {
+        download.start().catch(() => {});
+      } else {
+        // التحميل القديم مابيتكملش، فبيتحمّل من الأول زي Retry في صفحة Firefox.
+        const win = browserWindow(browser);
+        win.DownloadURL(download.source.url, download.target.path ? PathUtils.filename(download.target.path) : null, win.document);
+      }
       break;
     case "downloads.cancel":
       await download.cancel();
       break;
-    case "downloads.remove": {
-      // من اللستة بس، والملف بيفضل مكانه.
-      const list = await lazy.Downloads.getList(lazy.Downloads.ALL);
-      await list.remove(download);
-      await download.finalize(false);
+    case "downloads.remove":
+      // من اللستة والـ history، والملف اللي خلص بيفضل مكانه.
+      await lazy.DownloadsCommon.deleteDownload(download);
       break;
-    }
   }
   return downloadsList();
 }
@@ -1376,9 +1402,11 @@ export async function handle(message, browser) {
     case "downloads.retry":
     case "downloads.cancel":
     case "downloads.remove":
-      return downloadAction(type, payload);
+      return downloadAction(type, payload, browser);
     case "downloads.clearDone": {
-      const list = await lazy.Downloads.getList(lazy.Downloads.ALL);
+      // زي "Clear Downloads" في مكتبة Firefox: سجل التحميلات في الـ history، واللي خلص من الـ session. الملفات بتفضل مكانها.
+      await lazy.PlacesUtils.history.removeVisitsByFilter({ transition: lazy.PlacesUtils.history.TRANSITIONS.DOWNLOAD });
+      const list = await lazy.Downloads.getList(lazy.Downloads.PUBLIC);
       await list.removeFinished();
       return downloadsList();
     }
