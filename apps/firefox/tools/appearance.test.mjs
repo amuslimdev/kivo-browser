@@ -33,7 +33,11 @@ function host() {
     Ci: { nsIFilePicker: { modeOpen: 0, filterImages: 1, returnOK: 0 } },
     Services: {
       uuid: { generateUUID: () => `{${randomUUID()}}` },
-      prefs: { getStringPref: () => stored, setStringPref: (_, value) => { stored = value; }, clearUserPref: () => { stored = ''; } },
+      prefs: {
+        getStringPref: (name, fallback) => (name === 'kivo.theme' ? stored : fallback),
+        setStringPref: (name, value) => { if (name === 'kivo.theme') stored = value; },
+        clearUserPref: name => { if (name === 'kivo.theme') stored = ''; },
+      },
       obs: { notifyObservers() {} },
     },
     IOUtils: {
@@ -108,6 +112,20 @@ test('invalid settings and photos from another tab cannot overwrite saved settin
   await assert.rejects(h.request('appearance.save', { session, theme, avatar: { kind: 'photo', version: photo.version } }, {}), /expired/);
   assert.deepEqual(h.files, before);
   assert.deepEqual(h.theme(), photoTheme);
+});
+
+test('the profile character is saved with the appearance, and only a known one', async () => {
+  const h = host();
+  const saved = () => JSON.parse(new TextDecoder().decode(h.files.get('profile.json'))).character;
+  const draft = { session, theme, avatar: { kind: 'initial' } };
+  await assert.rejects(h.request('appearance.save', { ...draft, character: 'wizard' }), /character/);
+  await h.request('appearance.save', { ...draft, character: 'energetic-girl' });
+  assert.equal(saved(), 'energetic-girl');
+  await h.request('appearance.save', { ...draft, character: null });
+  assert.equal(saved(), 'energetic-girl');
+  await assert.rejects(h.request('character.set', { character: 'wizard' }), /character/);
+  await h.request('character.set', { character: 'young-genius' });
+  assert.equal(saved(), 'young-genius');
 });
 
 test('discarding an older session does not discard the current photo draft', async () => {

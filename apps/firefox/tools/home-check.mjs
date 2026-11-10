@@ -23,6 +23,8 @@ const PRESETS = {
   space: { mode: 'dark', accent: '#8b6cff', font: 'alexandria', corners: 'round', background: { kind: 'scene', scene: 'space' } },
   ocean: { mode: 'dark', accent: '#14c2d6', font: 'rubik', corners: 'bubbly', background: { kind: 'scene', scene: 'ocean' } },
   clean: { mode: 'light', accent: '#7964bc', font: 'readex', corners: 'round', background: { kind: 'color', color: '#f5f4f0' } },
+  'calm-blue': { mode: 'light', accent: '#4f7da0', font: 'readex', corners: 'round', background: { kind: 'color', color: '#eef3f6' } },
+  'calm-rose': { mode: 'light', accent: '#ad6f88', font: 'readex', corners: 'round', background: { kind: 'color', color: '#f8f1f2' } },
 };
 const preset = PRESETS[args.preset];
 if (!preset) throw new Error(`unknown preset ${args.preset}`);

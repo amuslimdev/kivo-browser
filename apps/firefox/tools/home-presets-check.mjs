@@ -46,7 +46,7 @@ try {
   page = (await kivo.send('browsingContext.getTree', {})).contexts.findLast(context => context.url.startsWith(addon))?.context;
   await ui('document.querySelector(".presets-button").click(); "ok"');
   await sleep(700);
-  check('gallery shows saved and built-in presets', await ui('document.querySelectorAll(".preset-card").length === 10'));
+  check('gallery shows saved and built-in presets', await ui('document.querySelectorAll(".preset-card").length === 11'));
   await ui('[...document.querySelectorAll(".preset-card")].find(card => card.querySelector("h3").textContent.trim() === "Chrome style").querySelector("button").click(); "ok"');
   check('selecting a preset does not change the saved layout', JSON.stringify((await request('widgets.get')).widgets) === JSON.stringify(widgets));
   await ui('document.querySelector(".use-preset").click(); "ok"');
@@ -61,7 +61,7 @@ try {
   for (const width of [820, 390]) {
     await kivo.evaluate(`window.resizeTo(${width}, 1000); "ok"`);
     await sleep(200);
-    check(`home toolbar fits a ${width}px window`, await ui('document.querySelector(".top").scrollWidth <= document.querySelector(".top").clientWidth + 1'));
+    check(`the edit button fits a ${width}px window`, await ui('(() => { const box = document.querySelector(".edit-pencil").getBoundingClientRect(); return box.right <= innerWidth && box.bottom <= innerHeight && box.width > 0; })()'));
   }
   await kivo.evaluate('window.resizeTo(1440, 1000); "ok"');
   await request('homePresets.delete', { id: personal.id });
@@ -86,6 +86,59 @@ try {
   await ui('document.querySelector(".presets-button").click(); "ok"');
   await sleep(400);
   writeFileSync(join(args.out, 'home-presets-native.png'), await tabShot(kivo));
+
+  // The simple page: Firefox's own new tab in place of Kivo Home, and the way back.
+  const newTabURL = () => kivo.evaluate(`ChromeUtils.importESModule('resource:///modules/AboutNewTab.sys.mjs').AboutNewTab.newTabURL`);
+  const tabURL = () => kivo.evaluate('gBrowser.selectedBrowser.currentURI.spec');
+  const choosePreset = async name => {
+    await ui(`[...document.querySelectorAll(".preset-card")].find(card => card.querySelector("h3").textContent.trim() === ${JSON.stringify(name)}).querySelector("button").click(); "ok"`);
+    await sleep(200);
+    await ui('document.querySelector(".use-preset").click(); "ok"').catch(() => 'navigated');
+    await sleep(1500);
+  };
+  await choosePreset('Firefox');
+  check('the Firefox card opens Firefox\'s page in that tab', await tabURL() === 'about:home');
+  check('new tabs use Firefox\'s page', await newTabURL() === 'about:newtab');
+  check('it is kept for this profile', await kivo.evaluate(`Services.prefs.getStringPref('kivo.home.page', '')`) === 'firefox');
+  await kivo.evaluate(`gBrowser.selectedTab = gBrowser.addTrustedTab(${JSON.stringify(`${addon}index.html`)}); "ok"`);
+  await sleep(2500);
+  check('opening Kivo Home goes to the simple page', await tabURL() === 'about:home');
+  await kivo.evaluate(`gBrowser.selectedTab = gBrowser.addTrustedTab(${JSON.stringify(`${addon}index.html#customize`)}); "ok"`);
+  await sleep(2500);
+  check('"Change my look" still reaches Kivo Home', (await tabURL()).startsWith(addon));
+  page = (await kivo.send('browsingContext.getTree', {})).contexts.findLast(context => context.url.startsWith(addon))?.context;
+  check('with Make it yours open', await ui('!!document.querySelector(".drawer")'));
+  await ui('document.querySelector(".cancel-button").click(); "ok"');
+  await sleep(300);
+  await ui('document.querySelector(".presets-button").click(); "ok"');
+  await sleep(700);
+  await choosePreset('Chrome style');
+  check('any other preset brings Kivo Home back', (await newTabURL()).startsWith(addon) && await kivo.evaluate(`Services.prefs.getStringPref('kivo.home.page', 'kivo')`) === 'kivo');
+
+  // The way back from Firefox's page: the home stays as it was, and every other choice is in front of the owner. The
+  // test settings leave Firefox's page blank, so where the button sits next to Firefox's pencil is in character-check.mjs.
+  const before = JSON.stringify((await request('widgets.get')).widgets);
+  await ui('document.querySelector(".presets-button").click(); "ok"');
+  await sleep(700);
+  await choosePreset('Firefox');
+  check('the Firefox card is still there to pick', await tabURL() === 'about:home');
+  await sleep(2000);
+  const firefoxPage = (await kivo.send('browsingContext.getTree', {})).contexts.findLast(context => context.url === 'about:home')?.context;
+  const button = JSON.parse(await kivo.evaluateIn(firefoxPage, `JSON.stringify((() => {
+    const box = document.querySelector('.kivo-home-button')?.getBoundingClientRect();
+    return box && { fits: box.right <= innerWidth && box.bottom <= innerHeight && box.width > 0, count: document.querySelectorAll('.kivo-home-button').length };
+  })())`));
+  console.log(JSON.stringify(button));
+  check('Firefox\'s page has one Kivo Home button', button?.count === 1);
+  check('on screen', button?.fits);
+  await kivo.evaluateIn(firefoxPage, 'document.querySelector(".kivo-home-button").click(); "ok"').catch(() => 'navigated');
+  await sleep(2500);
+  check('it goes back to Kivo Home in the same tab', (await tabURL()).startsWith(addon));
+  check('and new tabs follow', (await newTabURL()).startsWith(addon) && await kivo.evaluate(`Services.prefs.getStringPref('kivo.home.page', 'kivo')`) === 'kivo');
+  page = (await kivo.send('browsingContext.getTree', {})).contexts.findLast(context => context.url.startsWith(addon))?.context;
+  check('with the other homes open', await ui('!!document.querySelector(".home-presets") && document.querySelectorAll(".preset-card").length > 5'));
+  check('and the home as it was', JSON.stringify((await request('widgets.get')).widgets) === before);
+  check('Back does not fall into Firefox\'s page', !(await kivo.evaluate('gBrowser.selectedBrowser.canGoBack')) || (await tabURL()).startsWith(addon));
 } catch (error) {
   code = 1;
   console.error(error);

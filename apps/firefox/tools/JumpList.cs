@@ -8,8 +8,12 @@
 //   category <title>         the items after it go in this custom category
 //   tasks                    the items after it go in Tasks
 //   item <title> <arguments> <icon file> <icon index> <tooltip>
+//   shortcut <arguments> <icon file>   the shortcuts of this Kivo.exe with these arguments get this icon;
+//                                      no file is Kivo.exe's own (a pinned button is drawn from its shortcut)
+//   folder <path> [all]                where those shortcuts can be; "all" looks in its subfolders too
 // Windows refuses an item the user removed from the list since it was last written, so those are left out
-// and printed as "removed<TAB><AppUserModelID><TAB><arguments>". Failures are printed as "error<TAB>...".
+// and printed as "removed<TAB><AppUserModelID><TAB><arguments>". A shortcut that changed is printed as
+// "shortcut<TAB><path>". Failures are printed as "error<TAB>...".
 // Kept ASCII and C# 5, like Launcher.cs.
 using System;
 using System.Collections.Generic;
@@ -107,6 +111,7 @@ static class KivoJumpList
                     Console.WriteLine("error\t" + app.Id + "\t" + e.Message);
                 }
             }
+            WriteShortcuts(file, exe);
         }
         catch (Exception e)
         {
@@ -115,6 +120,33 @@ static class KivoJumpList
         }
         Console.Out.Flush();
         return failed == 0 ? 0 : 1;
+    }
+
+    static void WriteShortcuts(string file, string exe)
+    {
+        string arguments = null;
+        string icon = null;
+        var folders = new List<KeyValuePair<string, bool>>();
+        foreach (string line in File.ReadAllLines(file, Encoding.UTF8))
+        {
+            string[] fields = line.Split('\t');
+            if (fields[0] == "shortcut" && fields.Length >= 3)
+            {
+                arguments = fields[1];
+                icon = fields[2].Length > 0 ? fields[2] : exe;
+            }
+            else if (fields[0] == "folder" && fields.Length >= 3)
+            {
+                folders.Add(new KeyValuePair<string, bool>(fields[1], fields[2] == "all"));
+            }
+        }
+        if (arguments != null)
+        {
+            foreach (string changed in KivoShortcut.SetIcons(folders, exe, arguments, icon))
+            {
+                Console.WriteLine("shortcut\t" + changed);
+            }
+        }
     }
 
     static List<AppList> Read(string file)

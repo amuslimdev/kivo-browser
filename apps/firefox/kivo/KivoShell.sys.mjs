@@ -9,8 +9,12 @@
 // - التحديثات (G6): Kivo بينزّل النسخة الجديدة من الـ release في الخلفية، و Kivo.exe بيركّبها وهو بيفتح (تحت).
 // - زي Chrome: Ctrl+Shift+N للنافذة الخاصة، والبحث في الصفحة (Ctrl+F) صندوق صغير فوق (findbar.css).
 
+import { readProfile } from "moz-src:///browser/components/kivo/KivoData.sys.mjs";
+import { CHARACTER_MARKS } from "moz-src:///browser/components/kivo/KivoTaskbar.sys.mjs";
+
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
@@ -18,6 +22,76 @@ ChromeUtils.defineESModuleGetters(lazy, {
   setInterval: "resource://gre/modules/Timer.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
+
+// ---------- الصفحة البسيطة ----------
+// Kivo Home extension بتحط نفسها مكان التاب الجديد كل ما Kivo يفتح. الـ profile اللي اختار الصفحة البسيطة بيرجّع صفحة
+// Firefox على طول، من غير ما يعدّي على Kivo Home. فتح Kivo وزرار Home بيفضلوا على Kivo Home، وهي بتحوّل (load في store.ts).
+
+const HOME_PAGE_PREF = "kivo.home.page";
+
+function simplePage() {
+  return Services.prefs.getStringPref(HOME_PAGE_PREF, "kivo") === "firefox";
+}
+
+function keepSimplePage() {
+  if (simplePage() && lazy.AboutNewTab.newTabURLOverridden) {
+    lazy.AboutNewTab.resetNewTabURL();
+  }
+}
+
+/** أيقونة الولد أو البنت والاسم للصفحة البسيطة (KivoSimplePageChild). الأيقونة الفاضية هي لوجو Kivo. */
+async function shareLook() {
+  const { name, character } = await readProfile();
+  const face = character === "energetic-girl" ? CHARACTER_MARKS[character] : "";
+  Services.ppmm.sharedData.set("kivo:simple-page", { greeting: name ? `Hi, ${name}` : "Hi!", face });
+  Services.ppmm.sharedData.flush();
+  useTabIcon(face);
+}
+
+let tabIcon = null;
+let tabIconFace = "";
+
+/**
+ * أيقونة التاب بتاعة الصفحة: Firefox كاتبها ثابتة لـ about:home و about:newtab (FAVICON_DEFAULTS)، ومابيقراش الـ link
+ * بتاع الصفحة. فبنبدّل الملف نفسه في الـ profile ده، زي override في jar.mn بس وقت التشغيل.
+ */
+function useTabIcon(face) {
+  if (face === tabIconFace) {
+    return;
+  }
+  tabIconFace = face;
+  tabIcon?.destruct();
+  tabIcon = null;
+  if (face) {
+    const manifest = Services.io.newFileURI(Services.dirsvc.get("ProfD", Ci.nsIFile));
+    tabIcon = Cc["@mozilla.org/addons/addon-manager-startup;1"]
+      .getService(Ci.amIAddonManagerStartup)
+      .registerChrome(manifest, [["override", "chrome://branding/content/icon32.png", face]]);
+  }
+}
+
+function watchHomePage() {
+  ChromeUtils.registerWindowActor("KivoSimplePage", {
+    parent: { esModuleURI: "moz-src:///browser/components/kivo/KivoSimplePageParent.sys.mjs" },
+    child: {
+      esModuleURI: "moz-src:///browser/components/kivo/KivoSimplePageChild.sys.mjs",
+      events: { DOMDocElementInserted: {}, DOMContentLoaded: {} },
+    },
+    matches: ["about:home*", "about:newtab*"],
+  });
+  const share = () => shareLook().catch(console.error);
+  share();
+  Services.obs.addObserver(share, "kivo-profile-changed");
+  Services.obs.addObserver(share, "sps-profiles-updated");
+  Services.obs.addObserver(keepSimplePage, "newtab-url-changed");
+  Services.prefs.addObserver(HOME_PAGE_PREF, () => {
+    if (simplePage()) {
+      keepSimplePage();
+    } else {
+      lazy.AboutNewTab.newTabURL = Services.prefs.getDefaultBranch("").getStringPref("browser.startup.homepage");
+    }
+  });
+}
 
 // ---------- المتصفح الافتراضي ----------
 
@@ -436,6 +510,7 @@ export const KivoShell = {
   /** category browser-before-ui-startup. */
   init() {
     hookShellService();
+    watchHomePage();
     Services.obs.addObserver(win => {
       chromeKeys(win);
       chromeFind(win);

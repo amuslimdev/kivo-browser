@@ -34,6 +34,8 @@ export const PRESETS = {
   space: { mode: 'dark', accent: '#8b6cff', corners: 'round', font: 'alexandria' },
   ocean: { mode: 'dark', accent: '#14c2d6', corners: 'bubbly', font: 'rubik' },
   candy: { mode: 'light', accent: '#ff4f9a', corners: 'bubbly', font: 'baloo' },
+  'calm-blue': { mode: 'light', accent: '#4f7da0', corners: 'round', font: 'readex' },
+  'calm-rose': { mode: 'light', accent: '#ad6f88', corners: 'round', font: 'readex' },
   jungle: { mode: 'dark', accent: '#5ad16b', corners: 'round', font: 'changa' },
   neon: { mode: 'dark', accent: '#ff3df2', corners: 'soft', font: 'handjet' },
   aurora: { mode: 'dark', accent: '#39d6a0', corners: 'round', font: 'messiri' },

@@ -6,19 +6,19 @@
     فالـ sync مش محتاج الأيقونة الأصلية. كل صورة بتتعمل من جديد بنفس مقاسها، ومفيش صورة من Firefox بتفضل
     (trademark). ملفات الماك بتتشال لأنها مش بتستخدم على Windows.
 .PARAMETER Icon
-    Transparent square PNG. Defaults to the upright, narrower kite approved on
-    2026-10-28; its editable SVG sits beside the PNG master.
+    Transparent square PNG. Defaults to the compact Malek-with-magnifier icon
+    approved on 2026-11-05.
 #>
 param([string] $Icon)
 . "$PSScriptRoot\common.ps1"
 Add-Type -AssemblyName System.Drawing
 
-if (-not $Icon) { $Icon = Join-Path $Repo 'docs\art\app-icon\2026-10-28\04-kite-front.png' }
+if (-not $Icon) { $Icon = Join-Path $Repo 'docs\art\app-icon\2026-11-05\malek-magnifier-v2.png' }
 $unofficial = Join-Path $Source 'browser\branding\unofficial'
 $target = Join-Path $FirefoxApp 'branding\kivo'
 if (-not (Test-Path $unofficial)) { throw "Firefox source not synced: $unofficial" }
 
-# خلفية بلاطة Start: أزرق غامق، عشان الـ kite (أزرق وسماوي ونعناعي) يبان عليها والاسم الأبيض يتقري.
+# Dark Start tile background keeps the icon and white app name readable.
 $TileColor = '#102052'
 $IcoSizes = @(16, 20, 24, 32, 40, 48, 64, 128, 256)
 $master = [System.Drawing.Bitmap]::new($Icon)

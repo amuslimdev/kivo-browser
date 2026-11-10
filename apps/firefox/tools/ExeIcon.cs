@@ -54,7 +54,7 @@ public static class KivoExeIcon
         int count = BitConverter.ToUInt16(ico, 4);
 
         var groups = new List<Group>();
-        var oldIcons = new List<KeyValuePair<ushort, ushort>>(); // (id، lang)
+        var oldIcons = new HashSet<KeyValuePair<ushort, ushort>>(); // (id، lang)
         int maxIconId = 0;
 
         IntPtr module = LoadLibraryEx(exePath, IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
@@ -103,7 +103,7 @@ public static class KivoExeIcon
         {
             foreach (var icon in oldIcons)
             {
-                // ممكن نفس الصورة تبقى في أكتر من group، والحذف التاني بيفشل عادي.
+                // A shared image must be removed only once per language.
                 UpdateResource(update, RT_ICON, (IntPtr)icon.Key, icon.Value, null, 0);
             }
 

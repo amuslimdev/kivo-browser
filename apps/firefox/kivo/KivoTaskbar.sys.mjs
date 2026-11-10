@@ -6,11 +6,15 @@
 //   AppUserModelID), which Windows draws from the window icon: the Kivo mark with the profile's picture at the
 //   lower left. The window's relaunch properties make a pin of that button start Kivo.exe with that profile,
 //   under the same icon (<profile>\kivo\taskbar.ico).
+// - A profile's character (boy or girl, in Kivo Home) is its whole icon, with no picture on it. Windows draws a pin
+//   from its shortcut, so Kivo.exe also points the shortcuts of that button at the icon: the main profile's are
+//   Kivo's own (Start, desktop, the pin). Windows keeps icons by path, so each character has its own file.
 // - The Jump List of each button: the profile's workspaces, its frequent sites, and new tab / window / private
 //   window. Firefox's builder writes only its own process's AppUserModelID, with one custom category, and its
 //   items started the engine without Kivo's identity. So Kivo.exe writes the lists (tools/JumpList.cs),
 //   Firefox's are off (browser.taskbar.lists.enabled in firefox-branding.js), and its other
 //   browser.taskbar.lists.* prefs still apply here.
+import { readProfile } from "moz-src:///browser/components/kivo/KivoData.sys.mjs";
 import { inkOn } from "moz-src:///browser/components/kivo/KivoTheme.sys.mjs";
 
 const lazy = {};
@@ -29,6 +33,12 @@ let artwork;
 let mainId = null;
 let launcherPath = null;
 let jumpList = null;
+const KIVO_MARK = "chrome://branding/content/about-logo.svg";
+// The profile characters (CHARACTERS in presets.ts). The Young Genius is Kivo's own mark.
+export const CHARACTER_MARKS = {
+  "young-genius": KIVO_MARK,
+  "energetic-girl": "chrome://browser/content/kivo/characters/energetic-girl.png",
+};
 const SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const WORKSPACE_SIZES = [16, 20, 24, 32, 48];
 // The System.AppUserModel properties of a window (propkey.h).
@@ -181,11 +191,19 @@ async function identityOf(profile) {
   if (!exe) {
     return null;
   }
+  const args = commandLine(["-profile", profile.path]);
   return {
     appId: `${taskbar().defaultGroupId}.Profile${profile.id}`,
-    command: commandLine([exe, "-profile", profile.path]),
+    args,
+    command: `${commandLine([exe])} ${args}`,
     name: `${profile.name} - Kivo`,
   };
+}
+
+/** The character this profile chose, or null. */
+async function characterOf() {
+  const { character } = await readProfile();
+  return Object.hasOwn(CHARACTER_MARKS, character) ? character : null;
 }
 
 async function image(win, url) {
@@ -279,23 +297,10 @@ async function writeFile(path, bytes) {
   await IOUtils.write(path, bytes, { tmpPath: `${path}.tmp` });
 }
 
-/** <profile>\kivo\taskbar.ico, the window icon. A pinned profile button keeps using it, so its path never changes. */
-async function iconFile(win, profile) {
-  const key = `${profile.avatar}:${profile.theme.themeBg}`;
+/** The icon file for this key, drawn once; a failed drawing is tried again next time. */
+async function drawnOnce(key, draw) {
   if (artwork?.key !== key) {
-    const file = (async () => {
-      const avatarURL = profile.hasCustomAvatar
-        ? PathUtils.toFileURI(profile.getAvatarPath())
-        : profile.getAvatarPath(48);
-      const [base, avatar] = await Promise.all([
-        image(win, "chrome://branding/content/about-logo.svg"),
-        image(win, avatarURL),
-      ]);
-      const path = PathUtils.join(PathUtils.profileDir, "kivo", "taskbar.ico");
-      await writeFile(path, await ico(win, SIZES, large => drawProfileIcon(large, base, avatar)));
-      return path;
-    })();
-    artwork = { key, file };
+    artwork = { key, file: draw() };
   }
   const { file } = artwork;
   try {
@@ -308,16 +313,51 @@ async function iconFile(win, profile) {
   }
 }
 
+/** <profile>\kivo\taskbar.ico, the window icon of a profile with no character. A pinned button keeps using it. */
+function iconFile(win, profile) {
+  return drawnOnce(`${profile.avatar}:${profile.theme.themeBg}`, async () => {
+    const avatarURL = profile.hasCustomAvatar
+      ? PathUtils.toFileURI(profile.getAvatarPath())
+      : profile.getAvatarPath(48);
+    const [base, avatar] = await Promise.all([image(win, KIVO_MARK), image(win, avatarURL)]);
+    const path = PathUtils.join(PathUtils.profileDir, "kivo", "taskbar.ico");
+    await writeFile(path, await ico(win, SIZES, large => drawProfileIcon(large, base, avatar)));
+    return path;
+  });
+}
+
+/** <profile>\kivo\app-<character>.ico: the character alone. */
+function characterFile(win, character) {
+  return drawnOnce(character, async () => {
+    const mark = await image(win, CHARACTER_MARKS[character]);
+    const path = PathUtils.join(PathUtils.profileDir, "kivo", `app-${character}.ico`);
+    await writeFile(path, await ico(win, SIZES, large => large.getContext("2d").drawImage(mark, 0, 0, large.width, large.height)));
+    return path;
+  });
+}
+
+/** The icon of a profile's button, or null for Kivo.exe's own (the boy on Kivo's own button is that icon). */
+async function buttonIcon(win, profile, identity, character) {
+  if (!character) {
+    return identity ? iconFile(win, profile) : null;
+  }
+  return identity || CHARACTER_MARKS[character] !== KIVO_MARK ? characterFile(win, character) : null;
+}
+
+function clearIdentity(state) {
+  if (state.identity) {
+    state.identity = false;
+    setWindowProperties(state.hwnd, [RELAUNCH_COMMAND, RELAUNCH_ICON, RELAUNCH_NAME, APP_ID].map(id => [id, null]));
+  }
+}
+
 /** Kivo's own button: the original icons, and no AppUserModelID of the window's own. */
 function reset(state) {
   if (state.original) {
     state.original.forEach((icon, slot) => setIcon(state.hwnd, slot, icon));
     release(state);
   }
-  if (state.identity) {
-    state.identity = false;
-    setWindowProperties(state.hwnd, [RELAUNCH_COMMAND, RELAUNCH_ICON, RELAUNCH_NAME, APP_ID].map(id => [id, null]));
-  }
+  clearIdentity(state);
   state.key = null;
 }
 
@@ -325,22 +365,22 @@ async function update(win, state, profile) {
   if (win.closed || state.closed) {
     return;
   }
-  const identity = await identityOf(profile);
+  const [identity, character] = await Promise.all([identityOf(profile), characterOf()]);
   if (win.closed || state.closed) {
-    return;
-  }
-  if (!identity) {
-    reset(state);
     return;
   }
   const api = windows();
   const dpi = api.dpi(state.hwnd) || 96;
-  const key = `${profile.avatar}:${profile.theme.themeBg}:${dpi}:${identity.appId}:${identity.name}:${identity.command}`;
+  const key = `${character}:${profile?.avatar}:${profile?.theme.themeBg}:${dpi}:${identity?.appId}:${identity?.name}:${identity?.command}`;
   if (state.key === key) {
     return;
   }
-  const file = await iconFile(win, profile);
+  const file = await buttonIcon(win, profile, identity, character);
   if (win.closed || state.closed) {
+    return;
+  }
+  if (!file) {
+    reset(state);
     return;
   }
   const icons = [];
@@ -361,14 +401,18 @@ async function update(win, state, profile) {
     icons.forEach((icon, slot) => setIcon(state.hwnd, slot, icon));
     release(state);
     state.icons = icons.splice(0);
-    // The AppUserModelID last: it moves the window to its button, which then has everything else.
-    setWindowProperties(state.hwnd, [
-      [RELAUNCH_COMMAND, identity.command],
-      [RELAUNCH_ICON, `${file},0`],
-      [RELAUNCH_NAME, identity.name],
-      [APP_ID, identity.appId],
-    ]);
-    state.identity = true;
+    if (identity) {
+      // The AppUserModelID last: it moves the window to its button, which then has everything else.
+      setWindowProperties(state.hwnd, [
+        [RELAUNCH_COMMAND, identity.command],
+        [RELAUNCH_ICON, `${file},0`],
+        [RELAUNCH_NAME, identity.name],
+        [APP_ID, identity.appId],
+      ]);
+      state.identity = true;
+    } else {
+      clearIdentity(state);
+    }
     state.key = key;
   } finally {
     icons.forEach(icon => api.destroy(icon));
@@ -459,9 +503,19 @@ function tasks(prefix, engine) {
   return list;
 }
 
+/** The shortcuts of this button, for Kivo.exe: the ones that start it (see JumpList.cs) get its icon. */
+async function shortcutLines(win, profile, identity) {
+  if (!win) {
+    return [];
+  }
+  const icon = await buttonIcon(win, profile, identity, await characterOf());
+  const folders = KivoTaskbar.shortcutFolders().map(({ path, all }) => `folder\t${field(path)}\t${all ? "all" : ""}`);
+  return [`shortcut\t${field(identity?.args)}\t${field(icon)}`, ...folders];
+}
+
 /** The lines for Kivo.exe --kivo-jumplist (tools/JumpList.cs), and the workspace icons they use. */
 async function jumpListText() {
-  const profile = lazy.SelectableProfileService.currentProfile ?? null;
+  const profile = KivoTaskbar.currentProfile();
   const identity = await identityOf(profile);
   const engine = Services.dirsvc.get("XREExeF", Ci.nsIFile).path;
   // The items name their profile, so a click opens it even when another profile was used last.
@@ -505,7 +559,25 @@ async function jumpListText() {
       lines.push("tasks", ...tasks(prefix, engine));
     }
   }
+  lines.push(...(await shortcutLines(win, profile, identity)));
   return { text: `${lines.join("\n")}\n`, icons };
+}
+
+/** False until the profile service knows this profile: its button would be taken for the main profile's. */
+function profileKnown() {
+  const profiles = lazy.SelectableProfileService;
+  return !(Services.prefs.getBoolPref("browser.profiles.created", false) && profiles.isEnabled && !profiles.initialized);
+}
+
+/** The icons of the open windows: a character changed, or no profile service calls setProfile (a single profile). */
+function refreshWindows() {
+  if (!profileKnown()) {
+    return;
+  }
+  const profile = KivoTaskbar.currentProfile();
+  for (const win of Services.wm.getEnumerator("navigator:browser")) {
+    KivoTaskbar.setProfile(win, profile).catch(error => console.error("Kivo taskbar:", error));
+  }
 }
 
 async function writeJumpList() {
@@ -513,9 +585,7 @@ async function writeJumpList() {
   if (!exe || jumpList.quitting) {
     return null;
   }
-  // Until the profile service knows this profile, the list would land on the main profile's button.
-  const profiles = lazy.SelectableProfileService;
-  if (Services.prefs.getBoolPref("browser.profiles.created", false) && profiles.isEnabled && !profiles.initialized) {
+  if (!profileKnown()) {
     jumpList.task?.arm();
     return null;
   }
@@ -583,6 +653,11 @@ export const KivoTaskbar = {
       rebuild();
     };
     Services.obs.addObserver(firstWindow, "browser-delayed-startup-finished");
+    Services.obs.addObserver(refreshWindows, "browser-delayed-startup-finished");
+    Services.obs.addObserver(() => {
+      refreshWindows();
+      rebuild();
+    }, "kivo-profile-changed");
     Services.obs.addObserver(rebuild, "kivo-workspaces-changed");
     Services.obs.addObserver(rebuild, "browser:purge-session-history");
     // Another profile was added, removed or renamed: the main profile, and so this one's button, may change.
@@ -603,6 +678,21 @@ export const KivoTaskbar = {
   mainProfileId() {
     mainId ??= lazy.SelectableProfileService.getAllProfiles().then(all => (all.length ? Math.min(...all.map(profile => profile.id)) : null));
     return mainId;
+  },
+
+  /** This profile, or null before there is a second one. Tests replace it. */
+  currentProfile() {
+    return lazy.SelectableProfileService.currentProfile ?? null;
+  },
+
+  /** Where Kivo's shortcuts can be: Start, the desktop, and the pins with the ones Windows makes for a pinned button. */
+  shortcutFolders() {
+    const folder = key => Services.dirsvc.get(key, Ci.nsIFile).path;
+    return [
+      { path: folder("Progs") },
+      { path: folder("Desk") },
+      { path: PathUtils.join(folder("AppData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned"), all: true },
+    ];
   },
 
   /** For tests: the Jump List lines this profile would write now. */

@@ -1,7 +1,9 @@
 // Kivo's taskbar (KivoTaskbar.sys.mjs) on an isolated profile: the real HICONs and AppUserModel properties of an
 // invisible test window, the Jump List lines and Kivo.exe writing them, and opening a workspace from the list.
-// No user windows, profiles, taskbar pins or shortcuts are changed. The Jump List goes to the AppUserModelID of
-// the tested package (never Kivo.Browser, the installed Kivo's) and is deleted at the end.
+// No user windows, profiles, taskbar pins or shortcuts are changed: the shortcuts tested are in a temporary folder.
+// The Jump List goes to the AppUserModelID of the tested package (never Kivo.Browser, the installed Kivo's) and is
+// deleted at the end.
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -23,6 +25,12 @@ function check(name, ok) {
 }
 const evaluate = expression => kivo.evaluate(expression);
 const json = expression => evaluate(`(async () => JSON.stringify(await (${expression})))()`).then(JSON.parse);
+const powershell = script => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' }).trim();
+const quoted = text => `'${text.replace(/'/g, "''")}'`;
+function makeShortcut(path, target, args = '') {
+  powershell(`$l = (New-Object -ComObject WScript.Shell).CreateShortcut(${quoted(path)}); $l.TargetPath = ${quoted(target)}; $l.Arguments = ${quoted(args)}; $l.IconLocation = ${quoted(target + ',0')}; $l.Save()`);
+}
+const shortcutIcon = path => powershell(`(New-Object -ComObject WScript.Shell).CreateShortcut(${quoted(path)}).IconLocation`);
 try {
   let module = args.module ?? 'moz-src:///browser/components/kivo/KivoTaskbar.sys.mjs';
   if (module.startsWith('file:')) {
@@ -32,6 +40,9 @@ try {
     module = 'resource://kivo-taskbar-test/' + name;
   }
   check('privileged taskbar module loads', await evaluate(`window.taskbarModule = ChromeUtils.importESModule(${JSON.stringify(module)}); !!taskbarModule.KivoTaskbar`));
+  const folders = await json('Promise.all(taskbarModule.KivoTaskbar.shortcutFolders().map(async folder => ({ ...folder, exists: await IOUtils.exists(folder.path) })))');
+  check('Start, the desktop and the pins are found', folders.length === 3 && folders.every(folder => folder.exists) && folders[2].all && /User Pinned$/.test(folders[2].path));
+  await evaluate('taskbarModule.KivoTaskbar.shortcutFolders = () => []; true');
   await evaluate(`(async () => {
     const { ctypes: C } = ChromeUtils.importESModule('resource://gre/modules/ctypes.sys.mjs');
     const user = C.open('user32.dll');
@@ -216,11 +227,76 @@ try {
   if (group === 'Kivo.Browser') throw new Error('This is the installed Kivo: its Jump List is not written by tests');
   const written = await json('taskbarModule.KivoTaskbar.writeJumpList()');
   check('Kivo.exe writes the Jump List', written?.exitCode === 0 && !/^error/m.test(written.output));
+
+  // ---------- The profile's character ----------
+  const girl = 'energetic-girl';
+  const kivoExe = resolve(args.kivo);
+  const shortcuts = mkdtempSync(join(output, 'shortcuts-'));
+  mkdirSync(join(shortcuts, 'implicit'));
+  const mainLink = join(shortcuts, 'Kivo.lnk');
+  const profileLink = join(shortcuts, 'implicit', 'Taskbar Test - Kivo.lnk');
+  const otherProfile = join(shortcuts, 'Other profile.lnk');
+  const otherInstall = join(shortcuts, 'Other install.lnk');
+  const otherApp = join(shortcuts, 'Notepad.lnk');
+  const profileArgs = own.command.slice(own.command.indexOf('-profile'));
+  makeShortcut(mainLink, kivoExe);
+  makeShortcut(profileLink, kivoExe, profileArgs);
+  makeShortcut(otherProfile, kivoExe, '-profile "C:\\Somewhere else"');
+  makeShortcut(otherInstall, join(shortcuts, 'Kivo.exe'));
+  makeShortcut(otherApp, 'C:\\Windows\\notepad.exe');
+  const untouched = [otherProfile, otherInstall, otherApp].map(shortcutIcon);
+  await evaluate(`taskbarModule.KivoTaskbar.shortcutFolders = () => [{ path: ${JSON.stringify(shortcuts)}, all: true }]; true`);
+  const writeShortcuts = async () => {
+    const result = await json('taskbarModule.KivoTaskbar.writeJumpList()');
+    return result?.exitCode === 0 && !/^error/m.test(result.output) ? result.output : null;
+  };
+  const setCharacter = character => evaluate(`ChromeUtils.importESModule('moz-src:///browser/components/kivo/KivoData.sys.mjs').handle({ type: 'character.set', payload: { character: ${JSON.stringify(character)} } }).then(p => p.character)`);
+  check('an unknown character is refused', await setCharacter('wizard').then(() => false, error => /Invalid character/.test(error.message)));
+  check('the character is kept in the profile', await setCharacter(girl) === girl);
+
+  await evaluate('window.taskbarMain = 1; taskbarModule.KivoTaskbar.currentProfile = () => taskbarTest.profile; true');
+  await setProfile('taskbarTest.profile');
+  const girlFile = await evaluate(`PathUtils.join(PathUtils.profileDir, 'kivo', 'app-${girl}.ico')`);
+  const girlButton = await json('taskbarTest.properties()');
+  check('another profile\'s button takes the character\'s icon, in a new file', girlButton.icon === `${girlFile},0` && girlButton.appId === `${group}.Profile99`);
+  const girlIcons = await json('taskbarTest.icons()');
+  const girlShot = await json('taskbarTest.snapshot(1,32)');
+  writeFileSync(join(output, 'native-character-badge-32.png'), Buffer.from(girlShot.png.split(',')[1], 'base64'));
+  check('with no profile picture on it', girlShot.pink === 0);
+  const profileWrite = await writeShortcuts();
+  check('the pin of that profile follows, and nothing else', profileWrite?.includes(profileLink) && !profileWrite.includes(mainLink)
+    && shortcutIcon(profileLink) === `${girlFile},0` && shortcutIcon(mainLink) === `${kivoExe},0`);
+
+  await evaluate('window.taskbarMain = 99; true');
+  await setProfile('taskbarTest.profile');
+  const mainIcons = await json('taskbarTest.icons()');
+  check('the main profile stays on Kivo\'s button, with the character\'s window icons', JSON.stringify(await json('taskbarTest.properties()')) === JSON.stringify(empty)
+    && mainIcons.every((icon, i) => icon !== initial[i]));
+  const plainShot = await json('taskbarTest.snapshot(1,32)');
+  writeFileSync(join(output, 'native-character-32.png'), Buffer.from(plainShot.png.split(',')[1], 'base64'));
+  const mainWrite = await writeShortcuts();
+  check('Kivo\'s own shortcuts take the character\'s icon', mainWrite?.includes(mainLink) && shortcutIcon(mainLink) === `${girlFile},0`);
+  check('other profiles, installs and programs are left alone', JSON.stringify([otherProfile, otherInstall, otherApp].map(shortcutIcon)) === JSON.stringify(untouched));
+  check('writing the same icon again changes nothing', !/^shortcut/m.test(await writeShortcuts() ?? 'shortcut'));
+
+  await setCharacter('young-genius');
+  await setProfile('taskbarTest.profile');
+  check('the boy is Kivo\'s own icon again', JSON.stringify(await json('taskbarTest.icons()')) === JSON.stringify(initial));
+  const boyWrite = await writeShortcuts();
+  check('and Kivo\'s shortcuts go back to Kivo.exe', boyWrite?.includes(mainLink) && shortcutIcon(mainLink) === `${kivoExe},0`);
+  await evaluate('window.taskbarMain = 1; true');
+  await setProfile('taskbarTest.profile');
+  const boyFile = await evaluate(`PathUtils.join(PathUtils.profileDir, 'kivo', 'app-young-genius.ico')`);
+  const boyButton = await json('taskbarTest.properties()');
+  const boyShot = await json('taskbarTest.snapshot(1,32)');
+  check('another profile\'s boy has his icon alone too', boyButton.icon === `${boyFile},0` && boyShot.pink === 0);
+  await evaluate('window.taskbarMain = 1; taskbarModule.KivoTaskbar.currentProfile = () => null; taskbarModule.KivoTaskbar.shortcutFolders = () => []; true');
+  await setProfile('null');
   await evaluate(`(async () => {
     const { Subprocess } = ChromeUtils.importESModule('resource://gre/modules/Subprocess.sys.mjs');
     const t = Cc['@mozilla.org/windows-taskbar;1'].getService(Ci.nsIWinTaskbar);
     const file = PathUtils.join(PathUtils.profileDir, 'kivo', 'jumplist-delete.txt');
-    await IOUtils.writeUTF8(file, 'app\\t' + t.defaultGroupId + '\\napp\\t' + t.defaultPrivateGroupId + '\\n');
+    await IOUtils.writeUTF8(file, 'app\\t' + t.defaultGroupId + '\\napp\\t' + t.defaultGroupId + '.Profile99\\napp\\t' + t.defaultPrivateGroupId + '\\n');
     const exe = PathUtils.join(Services.dirsvc.get('XREExeF', Ci.nsIFile).parent.path, 'Kivo.exe');
     const proc = await Subprocess.call({ command: exe, arguments: ['--kivo-jumplist', file] });
     if ((await proc.wait()).exitCode !== 0) throw new Error('Unable to delete the test Jump List');

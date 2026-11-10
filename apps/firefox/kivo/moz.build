@@ -11,6 +11,8 @@ MOZ_SRC_FILES += [
     "KivoProfiles.sys.mjs",
     "KivoShell.sys.mjs",
     "KivoSidebar.sys.mjs",
+    "KivoSimplePageChild.sys.mjs",
+    "KivoSimplePageParent.sys.mjs",
     "KivoTaskbar.sys.mjs",
     "KivoTheme.sys.mjs",
     "KivoWorkspaces.sys.mjs",

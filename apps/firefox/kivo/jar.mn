@@ -28,6 +28,7 @@ browser.jar:
     content/browser/kivo/sidebar-main.css (sidebar-main.css)
     content/browser/kivo/firefox/sidebar-main.css (/browser/components/sidebar/sidebar-main.css)
     content/browser/kivo/profiles/ (profiles/*)
+    content/browser/kivo/characters/ (characters/*)
     content/browser/kivo/firefox/profile-selector.css (/browser/components/profiles/content/profile-selector.css)
     content/browser/kivo/firefox/profile-card.css (/browser/components/profiles/content/profile-card.css)
     content/browser/kivo/firefox/profiles-pages.css (/browser/components/profiles/content/profiles-pages.css)

@@ -8,6 +8,7 @@
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
   DownloadHistory: "resource://gre/modules/DownloadHistory.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   DownloadsCommon: "moz-src:///browser/components/downloads/DownloadsCommon.sys.mjs",
@@ -34,6 +35,10 @@ const CORNERS = ["soft", "round", "bubbly"];
 const SCENES = ["sky", "space", "ocean", "candy", "jungle", "neon", "aurora"];
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 const PRESET = /^[a-z0-9-]{1,32}$/;
+// شخصية الـ profile (CHARACTERS في presets.ts)، وأيقونتها في KivoTaskbar.
+const CHARACTERS = new Set(["young-genius", "energetic-girl"]);
+// "firefox": الـ profile ده على صفحة Firefox النضيفة بدل Kivo Home (KivoShell).
+const HOME_PAGE_PREF = "kivo.home.page";
 
 const isObject = value => typeof value === "object" && value !== null && !Array.isArray(value);
 const isInt = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
@@ -141,7 +146,7 @@ export function cleanTheme(raw, strict = true) {
       throw new Error("Invalid home layout dimensions");
     }
     checkKeys(raw.home, ["width", "rowHeight", "columnGap", "rowGap", "padding"], strict);
-    const home = { width: 1280, rowHeight: 44, columnGap: 12, rowGap: 12, padding: 32, ...raw.home };
+    const home = { width: 1284, rowHeight: 52, columnGap: 12, rowGap: 12, padding: 32, ...raw.home };
     if (
       !(home.width === 0 || isInt(home.width, 800, 2560)) ||
       !isInt(home.rowHeight, 24, 96) ||
@@ -298,7 +303,8 @@ const WIDGET_TYPES = {
   search: { simple: bool },
   hero: {},
   greeting: {},
-  shortcuts: { source: oneOf("favorites", "top"), showTitle: bool },
+  hello: {},
+  shortcuts: { source: oneOf("favorites", "top"), showTitle: bool, firefox: bool },
   buddy: {},
 };
 
@@ -466,14 +472,14 @@ export async function readProfile() {
         : avatar.kind === "photo" && Number.isSafeInteger(avatar.version) && avatar.version > 0
           ? { kind: "photo", version: avatar.version }
           : { kind: "initial" },
+    character: CHARACTERS.has(stored.character) ? stored.character : null,
   };
 }
 
-async function writeAvatar(avatar) {
+async function updateProfile(change) {
   const stored = (await readJson("profile.json")) ?? {};
-  stored.avatar = avatar;
-  await writeJson("profile.json", stored);
-  // KivoProfiles بيرسم الأفاتار الجديد لصفحة الاختيار والقايمة.
+  await writeJson("profile.json", { ...stored, ...change });
+  // KivoProfiles بيرسم الأفاتار الجديد لصفحة الاختيار والقايمة، و KivoTaskbar بيغيّر الأيقونة.
   Services.obs.notifyObservers(null, "kivo-profile-changed");
   return readProfile();
 }
@@ -578,6 +584,11 @@ async function saveAppearance(payload, browser, homePreset = false) {
   } else {
     throw new Error("Invalid avatar");
   }
+  // null: لسه مااختارش، فاللي في الملف بيفضل.
+  const character = payload.character ?? undefined;
+  if (character !== undefined && !CHARACTERS.has(character)) {
+    throw new Error("Invalid character");
+  }
   const draft = appearancePhotos.get(browser);
   const photos = draft?.session === session ? draft.photos : new Map();
   const writes = new Map();
@@ -595,7 +606,7 @@ async function saveAppearance(payload, browser, homePreset = false) {
   }
   const profile = (await readJson("profile.json")) ?? {};
   const encode = value => new TextEncoder().encode(JSON.stringify(value));
-  writes.set("profile.json", encode({ ...profile, avatar }));
+  writes.set("profile.json", encode({ ...profile, avatar, ...(character ? { character } : {}) }));
   const widgets = payload.widgets === undefined ? undefined : cleanWidgets(payload.widgets);
   if (widgets) writes.set("widgets.json", encode(widgets));
   if (homePreset) {
@@ -628,6 +639,8 @@ async function saveAppearance(payload, browser, homePreset = false) {
     throw error;
   }
   if (appearancePhotos.get(browser) === draft) appearancePhotos.delete(browser);
+  // home preset يعني Kivo Home: اللي كان على الصفحة البسيطة بيرجع.
+  if (homePreset) Services.prefs.clearUserPref(HOME_PAGE_PREF);
   Services.obs.notifyObservers(null, "kivo-profile-changed");
   return { theme, profile: await readProfile(), ...(widgets ? { widgets } : {}) };
 }
@@ -693,6 +706,25 @@ function navigate(browser, input) {
   if (win && browser) {
     win.openTrustedLinkIn(uri.spec, "current", { targetBrowser: browser });
   }
+}
+
+/** محرك البحث الافتراضي لمربع البحث. أيقونته ممكن تبقى blob مالوش معنى برا الـ chrome، فبتروح data URL. */
+async function searchEngine(browser) {
+  const engine = await lazy.SearchService.getDefault();
+  let icon = null;
+  try {
+    const url = await engine.getIconURL(32);
+    if (url?.startsWith("data:")) {
+      icon = url;
+    } else if (url) {
+      const response = await browserWindow(browser).fetch(url);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      icon = bytesDataUrl(bytes, response.headers.get("content-type") || "image/png");
+    }
+  } catch {
+    // من غير أيقونة: العدسة.
+  }
+  return { name: engine.name, icon };
 }
 
 /** نافذة التاب اللي الصفحة فيه (context.xulBrowser). Firefox 158 غيّر اسم ownerGlobal لـ documentGlobal. */
@@ -1302,7 +1334,12 @@ export async function handle(message, browser) {
       navigate(browser, payload.text);
       return null;
     case "theme.get":
-      return { theme: storedTheme(), system: systemMode(browser), workspace: windowWorkspace(browser) };
+      return {
+        theme: storedTheme(),
+        system: systemMode(browser),
+        workspace: windowWorkspace(browser),
+        page: Services.prefs.getStringPref(HOME_PAGE_PREF, "kivo"),
+      };
     case "theme.set": {
       const theme = cleanTheme(payload.theme, true);
       // KivoTheme بيسمع للـ pref، فكل النوافذ بتتلوّن على طول.
@@ -1360,24 +1397,51 @@ export async function handle(message, browser) {
           .map(link => ({ url: link.url, title: trimText(link.title || new URL(link.url).host, 80) })),
       };
     }
+    case "home.page": {
+      if (payload.page !== "firefox" && payload.page !== "kivo") {
+        throw new Error("Invalid page");
+      }
+      let url = "about:home";
+      if (payload.page === "firefox") {
+        Services.prefs.setStringPref(HOME_PAGE_PREF, payload.page);
+      } else {
+        // الرجوع: Kivo Home زي ما سابها، والقوالب مفتوحة فوقها عشان باقي الاختيارات تبقى قدامه.
+        Services.prefs.clearUserPref(HOME_PAGE_PREF);
+        url = `${Services.prefs.getDefaultBranch("").getStringPref("browser.startup.homepage")}#presets`;
+      }
+      // بدل الصفحة اللي فيها الزرار، فـ Back مايرجّعش لـ Kivo Home اللي هترجع تحوّل.
+      browser?.loadURI(Services.io.newURI(url), {
+        triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+        loadFlags: Ci.nsIWebNavigation.LOAD_FLAGS_REPLACE_HISTORY,
+      });
+      return null;
+    }
+    case "search.engine":
+      return searchEngine(browser);
     case "profile.get":
       return readProfile();
     case "avatar.set": {
       const avatar = payload.avatar;
       if (avatar?.kind === "emoji" && typeof avatar.emoji === "string" && avatar.emoji.trim() && avatar.emoji.length <= 16) {
-        return writeAvatar({ kind: "emoji", emoji: avatar.emoji });
+        return updateProfile({ avatar: { kind: "emoji", emoji: avatar.emoji } });
       }
       if (avatar?.kind === "initial") {
-        return writeAvatar({ kind: "initial" });
+        return updateProfile({ avatar: { kind: "initial" } });
       }
       throw new Error("Invalid avatar");
+    }
+    case "character.set": {
+      if (!CHARACTERS.has(payload.character)) {
+        throw new Error("Invalid character");
+      }
+      return updateProfile({ character: payload.character });
     }
     case "avatar.pickPhoto": {
       if (payload.preview === true) {
         return pickPhoto(browser, "avatar.png", { size: 256, cover: true, type: "image/png" }, appearanceSession(payload));
       }
       const version = await pickPhoto(browser, "avatar.png", { size: 256, cover: true, type: "image/png" });
-      return version === null ? null : writeAvatar({ kind: "photo", version });
+      return version === null ? null : updateProfile({ avatar: { kind: "photo", version } });
     }
     case "background.pickPhoto": {
       if (payload.preview === true) {
