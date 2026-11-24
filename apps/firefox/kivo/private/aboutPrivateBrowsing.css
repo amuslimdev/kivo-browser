@@ -1,35 +1,30 @@
 /*
  * Kivo (G3): صفحة النافذة الخاصة. الملف ده بيتحط مكان aboutPrivateBrowsing.css بتاع Firefox (jar.mn، % override)،
- * فبيحمّله الأول وبعدين بيغيّر عليه. ليل هادي بلون Kivo، زي النافذة الخاصة نفسها (KivoTheme.sys.mjs بيخليها غامقة)،
- * من غير أطفال ولا زخرفة التعلب، وبقناع بسيط (mascot/mask.svg) وخط Kivo. الـ CSP بيسمح بـ chrome: بس، والخطوط من
- * chrome://kivo-fonts.
+ * فبيحمّله الأول وبعدين بيغيّر عليه. رمادي غامق زي Incognito في Chrome، بنفس لون شريط الأدوات فالصفحة بتكمّله
+ * (PRIVATE_COLORS في KivoTheme.sys.mjs)، وبسيطة (18 نوفمبر 2026): مالك بالـ hood (أيقونة النوافذ الخاصة، من
+ * make-branding.ps1)، والعنوان، والبحث، وسطر واحد بلينكه. الـ CSP بيسمح بـ chrome: بس، والخطوط من chrome://kivo-fonts.
  */
 @import url("chrome://browser/content/kivo/firefox/aboutPrivateBrowsing.css");
 @import url("chrome://browser/content/kivo/fonts.css");
 
 html.private {
-  --kivo-night: #15132a;
-  --kivo-night-glow: rgb(121 100 188 / 30%);
-  --kivo-night-glow-2: rgb(56 189 248 / 12%);
-  --kivo-night-ink: #f1effa;
-  --kivo-night-muted: #b9b4d6;
-  --kivo-night-field: #262343;
-  --kivo-night-line: #3a3562;
-  --kivo-night-accent: #a593e6;
+  --kivo-private-page: #35363a;
+  --kivo-private-field: #202124;
+  --kivo-private-line: #5f6368;
+  --kivo-private-ink: #e8eaed;
+  --kivo-private-muted: #9aa0a6;
+  --kivo-private-accent: #7c3aed;
+  --kivo-private-link: #c4b5fd;
 
-  --background-color-canvas: var(--kivo-night) !important;
-  --link-color: var(--kivo-night-accent) !important;
-  --link-color-hover: #c3b6f2 !important;
-  --link-color-active: #c3b6f2 !important;
+  --background-color-canvas: var(--kivo-private-page) !important;
+  --link-color: var(--kivo-private-link) !important;
+  --link-color-hover: #ddd6fe !important;
+  --link-color-active: #ddd6fe !important;
 
   color-scheme: dark;
-  color: var(--kivo-night-ink) !important;
+  color: var(--kivo-private-ink) !important;
   font-family: "Readex Pro", "Segoe UI", system-ui, sans-serif;
-  background:
-    radial-gradient(55% 45% at 50% 0%, var(--kivo-night-glow), transparent),
-    radial-gradient(45% 40% at 100% 100%, var(--kivo-night-glow-2), transparent),
-    var(--kivo-night) !important;
-  background-attachment: fixed !important;
+  background: var(--kivo-private-page) !important;
 }
 
 /* Firefox's full-page fox tail. */
@@ -37,38 +32,72 @@ html.private body::before {
   content: none !important;
 }
 
+/* كله في نص الصفحة، أعلى من النص شوية. */
+html.private .container {
+  justify-content: center !important;
+  padding-block-end: 12vh;
+}
+
+html.private .logo-and-wordmark {
+  margin-block: 0 20px !important;
+}
+
 html.private .logo {
-  width: 72px !important;
-  height: 72px !important;
-  background-size: 72px !important;
-  fill: #4f3fae;
-  -moz-context-properties: fill;
-  filter: drop-shadow(0 8px 24px rgb(121 100 188 / 45%));
+  width: 112px !important;
+  height: 112px !important;
+  background: url("chrome://browser/content/kivo/private/malek-private.svg") no-repeat center / contain !important;
 }
 
-html.private :is(h1, .nova-tagline, #info-title) {
+html.private .nova-tagline {
   font-family: inherit;
+  font-size: 24px !important;
   font-weight: 700;
-  color: var(--kivo-night-ink);
+  line-height: 1.3 !important;
+  color: var(--kivo-private-ink);
+  margin-block: 0 28px !important;
 }
 
-html.private :is(.nova-subheader, #info-body, .info) {
-  color: var(--kivo-night-muted);
+/* الفقرة الطويلة تحت العنوان: السطر اللي تحت البحث بيقول المهم. */
+html.private .nova-subheader {
+  display: none !important;
 }
 
-/* شريط البحث زي شريط العنوان في Kivo: كبسولة هادية. */
+/* شريط البحث زي شريط العنوان في النافذة: كبسولة غامقة، وإطار بنفسجي لما تكتب. */
 html.private content-search-handoff-ui {
-  --content-search-handoff-ui-background-color: var(--kivo-night-field) !important;
-  --content-search-handoff-ui-unfocused-border-color: var(--kivo-night-line) !important;
-  --content-search-handoff-ui-fakefocus-border-color: var(--kivo-night-accent) !important;
-  --content-search-handoff-ui-fakefocus-box-shadow-inner: var(--kivo-night-accent) !important;
-  --content-search-handoff-ui-fakefocus-box-shadow-outer: rgb(165 147 230 / 30%) !important;
+  --content-search-handoff-ui-background-color: var(--kivo-private-field) !important;
+  --content-search-handoff-ui-unfocused-border-color: var(--kivo-private-line) !important;
+  --content-search-handoff-ui-fakefocus-border-color: var(--kivo-private-accent) !important;
+  --content-search-handoff-ui-fakefocus-box-shadow-inner: var(--kivo-private-accent) !important;
+  --content-search-handoff-ui-fakefocus-box-shadow-outer: rgb(124 58 237 / 35%) !important;
   --content-search-handoff-ui-border-radius: 999px !important;
   border-radius: 999px;
 }
 
+/* السطر اللي بيقول النافذة الخاصة بتمسح إيه، تحت البحث على طول مش في آخر الصفحة، ولينكه جنبه. */
 html.private .info-border {
-  border-color: var(--kivo-night-line) !important;
+  margin-block: 20px 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+html.private .info {
+  font-size: 13px;
+  color: var(--kivo-private-muted) !important;
+}
+
+html.private #info-body {
+  display: inline;
+  color: inherit;
+}
+
+html.private #private-browsing-myths {
+  margin-block-start: 0 !important;
+  margin-inline-start: 4px;
+}
+
+/* إعلانات Mozilla (VPN و Focus) مش من Kivo. */
+html.private :is(.promo, .nova-promo-wrapper) {
+  display: none !important;
 }
 
 a:link,

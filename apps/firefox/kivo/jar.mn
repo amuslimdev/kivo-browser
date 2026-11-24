@@ -33,6 +33,8 @@ browser.jar:
     content/browser/kivo/firefox/profile-card.css (/browser/components/profiles/content/profile-card.css)
     content/browser/kivo/firefox/profiles-pages.css (/browser/components/profiles/content/profiles-pages.css)
     content/browser/kivo/private/aboutPrivateBrowsing.css (private/aboutPrivateBrowsing.css)
+    content/browser/kivo/private/malek-private.svg (private/malek-private.svg)
+    content/browser/kivo/private/malek-private-small.svg (private/malek-private-small.svg)
     content/browser/kivo/firefox/aboutPrivateBrowsing.css (/browser/themes/shared/privatebrowsing/aboutPrivateBrowsing.css)
     builtin-addons/kivo-home/manifest.json (home/manifest.json)
     builtin-addons/kivo-home/api.json (home/api.json)
@@ -50,7 +52,7 @@ browser.jar:
 # Each picture is made for its place, or is a general mood for rare places (docs/MASCOT.md lists them all).
 # tools/make-mascot.ps1 makes mascot/<picture>[-<shape>].svg for every name below: the picture centered at the
 # proportions of the Firefox image it replaces (-tall 0.62, square, -4x3 1.3, -3x2 1.6, -wide 2.2). The pictures and
-# their ChatGPT prompts are in docs/art/mascot/heroes. mask.svg and none.svg are drawn by hand.
+# their ChatGPT prompts are in docs/art/mascot/heroes. none.svg is drawn by hand.
     content/browser/kivo/mascot/extensions-wide.svg (mascot/extensions-wide.svg)
     content/browser/kivo/mascot/extensions-3x2.svg (mascot/extensions-3x2.svg)
     content/browser/kivo/mascot/extensions-off-4x3.svg (mascot/extensions-off-4x3.svg)
@@ -79,7 +81,6 @@ browser.jar:
     content/browser/kivo/mascot/hello.svg (mascot/hello.svg)
     content/browser/kivo/mascot/hello-tall.svg (mascot/hello-tall.svg)
     content/browser/kivo/mascot/hello-3x2.svg (mascot/hello-3x2.svg)
-    content/browser/kivo/mascot/mask.svg (mascot/mask.svg)
     content/browser/kivo/mascot/none.svg (mascot/none.svg)
 
 # extensions: The Planner choosing among floating options: the Extensions menu and about:addons with no add-ons.
@@ -168,12 +169,13 @@ browser.jar:
 % override chrome://browser/skin/illustrations/tab-groups.svg chrome://browser/content/kivo/mascot/hello-3x2.svg
 % override chrome://global/content/defaultagent/default-browser-notification-privacy-image.svg chrome://browser/content/kivo/mascot/hello-3x2.svg
 
-# Private windows: no child. The page's full-screen fox decorations go away, and the private-window icon
-# (Firefox's mask with fox ears) is a plain mask.
+# Private windows: the page's full-screen fox decorations go away, and the private-window icon (Firefox's mask
+# with fox ears, in the toolbar and the tab) is Malek in his violet hood, the private windows' app icon since
+# 2026-11-18. The page shows the big one itself (private/aboutPrivateBrowsing.css); both come from make-branding.ps1.
 % override chrome://browser/skin/privatebrowsing/fox-tail.svg chrome://browser/content/kivo/mascot/none.svg
 % override chrome://browser/skin/privatebrowsing/kit-pbw.svg chrome://browser/content/kivo/mascot/none.svg
-% override chrome://browser/skin/privatebrowsing/pbm-logo.svg chrome://browser/content/kivo/mascot/mask.svg
-% override chrome://browser/skin/privatebrowsing/favicon.svg chrome://browser/content/kivo/mascot/mask.svg
+% override chrome://browser/skin/privatebrowsing/pbm-logo.svg chrome://browser/content/kivo/private/malek-private-small.svg
+% override chrome://browser/skin/privatebrowsing/favicon.svg chrome://browser/content/kivo/private/malek-private-small.svg
 
 # The Kivo mark: Firefox logos, and small icons where a child would be unreadable.
 % override chrome://browser/content/logos/share-firefox.svg chrome://branding/content/about-logo.svg

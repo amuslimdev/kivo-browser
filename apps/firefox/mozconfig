@@ -6,3 +6,11 @@ ac_add_options --with-branding=browser/branding/kivo
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-kivo
 # كل نسخة Firefox كبيرة بتطلب clobber، والـ artifact build بيتعمل تاني في دقايق، فمن غير ما update.ps1 يقف.
 mk_add_options AUTOCLOBBER=1
+# مفتاح Safe Browsing بتاع Kivo من Google (قوايم المواقع المزيفة والخبيثة). Firefox بيحطه في AppConstants وقت البناء.
+# الملف برا الـ repo: على الجهاز %USERPROFILE%\.kivo-release\safebrowsing.key، وفي GitHub Actions الـ workflow بيكتبه
+# من secret. من غيره Kivo بيتبني عادي بس من غير Safe Browsing، و release.ps1 بيرفض ينشره.
+_kivo_safebrowsing_key="${KIVO_SAFEBROWSING_KEYFILE:-$USERPROFILE/.kivo-release/safebrowsing.key}"
+if [ -f "$_kivo_safebrowsing_key" ]; then
+  ac_add_options --with-google-safebrowsing-api-keyfile="$_kivo_safebrowsing_key"
+fi
+unset _kivo_safebrowsing_key

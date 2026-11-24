@@ -10,9 +10,13 @@
 //   item <title> <arguments> <icon file> <icon index> <tooltip>
 //   shortcut <arguments> <icon file>   the shortcuts of this Kivo.exe with these arguments get this icon;
 //                                      no file is Kivo.exe's own (a pinned button is drawn from its shortcut)
+//   private <AppUserModelID> <shortcut> <icon file> <icon index> [create]
+//                                      private windows' shortcuts of this install start "Kivo.exe -private-window"
+//                                      with this icon; "create" makes <shortcut> if there is none (KivoShortcut.SetPrivate)
 //   folder <path> [all]                where those shortcuts can be; "all" looks in its subfolders too
 // Windows refuses an item the user removed from the list since it was last written, so those are left out
-// and printed as "removed<TAB><AppUserModelID><TAB><arguments>". A shortcut that changed is printed as
+// and printed as "removed<TAB><AppUserModelID><TAB><arguments>". The categories get the items that fit the list
+// (printed as "slots<TAB><AppUserModelID><TAB><count>"), in order. A shortcut that changed is printed as
 // "shortcut<TAB><path>". Failures are printed as "error<TAB>...".
 // Kept ASCII and C# 5, like Launcher.cs.
 using System;
@@ -126,6 +130,7 @@ static class KivoJumpList
     {
         string arguments = null;
         string icon = null;
+        string[] privateLine = null;
         var folders = new List<KeyValuePair<string, bool>>();
         foreach (string line in File.ReadAllLines(file, Encoding.UTF8))
         {
@@ -135,6 +140,10 @@ static class KivoJumpList
                 arguments = fields[1];
                 icon = fields[2].Length > 0 ? fields[2] : exe;
             }
+            else if (fields[0] == "private" && fields.Length >= 6)
+            {
+                privateLine = fields;
+            }
             else if (fields[0] == "folder" && fields.Length >= 3)
             {
                 folders.Add(new KeyValuePair<string, bool>(fields[1], fields[2] == "all"));
@@ -143,6 +152,15 @@ static class KivoJumpList
         if (arguments != null)
         {
             foreach (string changed in KivoShortcut.SetIcons(folders, exe, arguments, icon))
+            {
+                Console.WriteLine("shortcut\t" + changed);
+            }
+        }
+        if (privateLine != null)
+        {
+            int index;
+            int.TryParse(privateLine[4], out index);
+            foreach (string changed in KivoShortcut.SetPrivate(folders, exe, privateLine[1], privateLine[2], privateLine[3], index, privateLine[5] == "create"))
             {
                 Console.WriteLine("shortcut\t" + changed);
             }
@@ -208,15 +226,24 @@ static class KivoJumpList
             {
                 Console.WriteLine("removed\t" + app.Id + "\t" + arguments);
             }
+            // The categories share the slots Windows gives them ("items in Jump Lists", 10 by default), in order:
+            // the last category (the frequent sites) is the one that gets shorter. Tasks don't count.
+            Console.WriteLine("slots\t" + app.Id + "\t" + slots);
+            int left = (int)slots;
             foreach (Group group in app.Groups)
             {
                 var items = (IObjectCollection)new EnumerableObjectCollection();
                 foreach (Item item in group.Items)
                 {
-                    // Tasks can't be removed by the user, only items in a category.
-                    if (group.Title == null || !removed.Contains(item.Arguments))
+                    if (group.Title == null)
                     {
                         items.AddObject(Link(item, exe));
+                    }
+                    // Tasks can't be removed by the user, only items in a category.
+                    else if (left > 0 && !removed.Contains(item.Arguments))
+                    {
+                        items.AddObject(Link(item, exe));
+                        left--;
                     }
                 }
                 uint count;

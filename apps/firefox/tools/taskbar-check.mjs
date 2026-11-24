@@ -4,8 +4,9 @@
 // The Jump List goes to the AppUserModelID of the tested package (never Kivo.Browser, the installed Kivo's) and is
 // deleted at the end.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { launch } from './kivo-bidi.mjs';
 
@@ -31,6 +32,14 @@ function makeShortcut(path, target, args = '') {
   powershell(`$l = (New-Object -ComObject WScript.Shell).CreateShortcut(${quoted(path)}); $l.TargetPath = ${quoted(target)}; $l.Arguments = ${quoted(args)}; $l.IconLocation = ${quoted(target + ',0')}; $l.Save()`);
 }
 const shortcutIcon = path => powershell(`(New-Object -ComObject WScript.Shell).CreateShortcut(${quoted(path)}).IconLocation`);
+// A shortcut with an AppUserModelID, like the one Firefox makes for private windows (Shortcut.cs, as install.ps1 does).
+function makeAppShortcut(path, target, appId) {
+  const source = fileURLToPath(new URL('./Shortcut.cs', import.meta.url));
+  powershell(`Add-Type -TypeDefinition (Get-Content -Raw -Encoding UTF8 -LiteralPath ${quoted(source)}); [KivoShortcut]::Create(${quoted(path)}, ${quoted(target)}, ${quoted(dirname(target))}, 'Kivo Private Browsing', ${quoted(appId)})`);
+}
+const shortcutInfo = path => JSON.parse(powershell(`$f = Get-Item -LiteralPath ${quoted(path)}; $l = (New-Object -ComObject WScript.Shell).CreateShortcut($f.FullName); `
+  + `$id = (New-Object -ComObject Shell.Application).NameSpace($f.DirectoryName).ParseName($f.Name).ExtendedProperty('System.AppUserModel.ID'); `
+  + `[pscustomobject]@{ target = $l.TargetPath; args = $l.Arguments; icon = $l.IconLocation; appId = $id } | ConvertTo-Json -Compress`));
 try {
   let module = args.module ?? 'moz-src:///browser/components/kivo/KivoTaskbar.sys.mjs';
   if (module.startsWith('file:')) {
@@ -190,12 +199,30 @@ try {
     await KivoWorkspaces.create({ name: 'Work', color: '#2f80ed' });
     await KivoWorkspaces.create({ name: 'study', color: '#e5484d' });
     const { PlacesUtils } = ChromeUtils.importESModule('resource://gre/modules/PlacesUtils.sys.mjs');
-    for (let i = 0; i < 3; i++) {
-      await PlacesUtils.history.insert({ url: 'https://example.com/kivo-jumplist', title: 'Kivo jump list site', visits: [{ date: new Date() }] });
-      await PlacesUtils.history.insert({ url: 'file:///C:/kivo-jumplist.html', visits: [{ date: new Date() }] });
-    }
+    const visit = (url, title, times) => PlacesUtils.history.insert({ url, title, visits: [...Array(times)].map((_, i) => ({ date: new Date(Date.now() - i * 60000) })) });
+    await visit('https://example.com/kivo-jumplist', 'Kivo jump list site', 6);
+    await visit('https://example.com/kivo-jumplist/other', 'Another page of the site', 3);
+    await visit('file:///C:/kivo-jumplist.html', undefined, 6);
+    await visit('https://twin.example.org/', 'Twin', 5);
+    await visit('https://dev.twin.example.org/', 'Twin', 4);
+    // An SVG icon like a lot of sites have, on the site's home only: Firefox's icon cache can't use SVG.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#ff8800"/></svg>';
+    await visit('https://example.com/', 'Example home', 1);
+    await PlacesUtils.favicons.setFaviconForPage(Services.io.newURI('https://example.com/'), Services.io.newURI('https://example.com/logo.svg'),
+      Services.io.newURI('data:image/svg+xml;base64,' + btoa(svg)));
     return true;
   })()`);
+  // Two other profiles: a girl, and one with Firefox's star in its colors.
+  const girlProfile = mkdtempSync(join(output, 'girl-'));
+  mkdirSync(join(girlProfile, 'kivo'));
+  writeFileSync(join(girlProfile, 'kivo', 'profile.json'), JSON.stringify({ character: 'energetic-girl' }));
+  const starProfile = mkdtempSync(join(output, 'star profile-'));
+  await evaluate(`taskbarModule.KivoTaskbar.otherProfiles = async () => [
+    { id: 7, name: 'Sara', path: ${JSON.stringify(girlProfile)}, avatar: 'star', hasCustomAvatar: false, theme: { themeBg: '#ffd5e5', themeFg: '#7a1f45' },
+      getAvatarPath: size => 'chrome://browser/content/profiles/assets/' + (size ?? 80) + '_star.svg' },
+    { id: 8, name: 'Omar', path: ${JSON.stringify(starProfile)}, avatar: 'star', hasCustomAvatar: false, theme: { themeBg: '#008c59', themeFg: '#ffffff' },
+      getAvatarPath: size => 'chrome://browser/content/profiles/assets/' + (size ?? 80) + '_star.svg' },
+  ]; true`);
   const spaces = await json('taskbarWorkspaces.list()');
   const work = spaces.find(ws => ws.name === 'Work');
   const study = spaces.find(ws => ws.name === 'study');
@@ -203,22 +230,54 @@ try {
   writeFileSync(join(output, 'jumplist.txt'), lines.map(line => line.join('\t')).join('\n'));
   const at = (kind, title) => lines.findIndex(line => line[0] === kind && line[1] === title);
   const engine = await evaluate(`Services.dirsvc.get('XREExeF', Ci.nsIFile).path`);
+  const iconFrame = async (path, size, name) => {
+    const bytes = Buffer.from(await json(`IOUtils.read(${JSON.stringify(path ?? '')}).then(b => [...b])`));
+    const entry = [...Array(bytes.readUInt16LE(4)).keys()].map(i => 6 + i * 16).find(e => bytes[e] === size);
+    writeFileSync(join(output, `${name}-${size}.png`), bytes.subarray(bytes.readUInt32LE(entry + 12), bytes.readUInt32LE(entry + 12) + bytes.readUInt32LE(entry + 8)));
+    return bytes;
+  };
+  const jumpIcon = name => new RegExp(`[\\\\/]kivo[\\\\/]jumplist[\\\\/]${name}\\.ico$`);
   check('the list is for this button', lines[0][0] === 'app' && lines[0][1] === group);
   const workItem = lines.find(line => line[0] === 'item' && line[1] === 'Work');
   check('workspaces come first, each opening itself', at('category', 'Workspaces') === 1 && workItem?.[2] === `--kivo-workspace ${work.id}`
     && lines.some(line => line[0] === 'item' && line[1] === 'study' && line[2] === `--kivo-workspace ${study.id}`));
-  const dot = Buffer.from(await json(`IOUtils.read(${JSON.stringify(workItem?.[3] ?? '')}).then(b => [...b])`));
-  check('a workspace shows its color dot and letter', /[\\/]kivo[\\/]jumplist[\\/]2f80ed-87\.ico$/.test(workItem?.[3] ?? '')
+  const dot = await iconFrame(workItem?.[3], 32, 'jumplist-workspace');
+  check('a workspace shows its color dot and letter', jumpIcon('2f80ed-87').test(workItem?.[3] ?? '')
     && dot.readUInt16LE(2) === 1 && dot.readUInt16LE(4) === 5);
-  // Its 32px frame, to look at.
-  const frame = [...Array(5).keys()].map(i => 6 + i * 16).find(entry => dot[entry] === 32);
-  writeFileSync(join(output, 'jumplist-workspace-32.png'), dot.subarray(dot.readUInt32LE(frame + 12), dot.readUInt32LE(frame + 12) + dot.readUInt32LE(frame + 8)));
-  const site = lines.find(line => line[0] === 'item' && line[2] === '-url https://example.com/kivo-jumplist');
-  check('frequent sites follow, without non-web addresses', at('category', 'Frequent') > at('category', 'Workspaces') && site?.[1] === 'Kivo jump list site'
+
+  const sara = lines.find(line => line[0] === 'item' && line[1] === 'Sara');
+  const omar = lines.find(line => line[0] === 'item' && line[1] === 'Omar');
+  check('the other profiles follow, each opening itself', at('category', 'Profiles') > at('category', 'Workspaces')
+    && sara?.[2] === `-profile ${/\s/.test(girlProfile) ? `"${girlProfile}"` : girlProfile}` && omar?.[2] === `-profile "${starProfile}"` && omar?.[5] === 'Open Omar');
+  check('each with its own picture', jumpIcon('profile-[0-9a-f]{16}').test(sara?.[3] ?? '') && jumpIcon('profile-[0-9a-f]{16}').test(omar?.[3] ?? '')
+    && sara[3] !== omar[3] && sara[4] === '0');
+  await iconFrame(sara?.[3], 32, 'jumplist-profile-girl');
+  await iconFrame(omar?.[3], 32, 'jumplist-profile-star');
+
+  const sites = lines.slice(at('category', 'Frequent') + 1, at('tasks')).filter(line => line[0] === 'item');
+  const site = sites.find(line => line[2] === '-url https://example.com/kivo-jumplist');
+  check('frequent sites come last, without non-web addresses', at('category', 'Frequent') > at('category', 'Profiles') && site?.[1] === 'Kivo jump list site'
     && !lines.some(line => line[2]?.includes('file:')));
+  check('one item per site, its most visited page', sites.filter(line => line[2].includes('example.com/')).length === 1);
+  check('two sites with one title show their address', sites.some(line => line[1] === 'Twin (twin.example.org)')
+    && sites.some(line => line[1] === 'Twin (dev.twin.example.org)'));
+  check('a site takes its home\'s icon, even an SVG', jumpIcon('site-[0-9a-f]{16}').test(site?.[3] ?? '') && site[4] === '0');
+  await iconFrame(site?.[3], 32, 'jumplist-site-svg');
+  const letter = sites.find(line => line[1] === 'Twin (twin.example.org)');
+  check('a site with no icon shows its first letter', jumpIcon('letter-[0-9a-f]{6}-84').test(letter?.[3] ?? ''));
+  await iconFrame(letter?.[3], 32, 'jumplist-site-letter');
+  check('five sites at most', sites.length <= 5);
+
   const tasks = lines.slice(at('tasks'), lines.findIndex((line, i) => i > 0 && line[0] === 'app'));
-  check('tasks keep Firefox\'s items with Kivo\'s icons in the engine', tasks.some(line => line[2] === '-browser' && line[3] === engine && line[4] === '2')
-    && tasks.some(line => line[2] === '-private-window') && tasks.some(line => line[2] === '-new-tab about:blank'));
+  const task = flag => tasks.find(line => line[2] === flag);
+  check('the tasks keep Firefox\'s items', task('-browser') && task('-private-window') && task('-new-tab about:blank'));
+  check('each task shows what it opens, not Kivo', [['-new-tab about:blank', 'new-tab'], ['-browser', 'new-window'], ['-private-window', 'private-window']]
+    .every(([flag, name]) => jumpIcon(`task-${name}-\\d+`).test(task(flag)?.[3] ?? '') && task(flag)[4] === '0' && task(flag)[3] !== engine));
+  for (const name of ['new-tab', 'new-window', 'private-window']) {
+    for (const size of [16, 32]) {
+      await iconFrame(tasks.find(line => line[3]?.includes(`task-${name}-`))?.[3], size, `jumplist-task-${name}`);
+    }
+  }
   const privateGroup = await evaluate(`Cc['@mozilla.org/windows-taskbar;1'].getService(Ci.nsIWinTaskbar).defaultPrivateGroupId`);
   check('the main button also writes the private windows\' tasks', lines.some(line => line[0] === 'app' && line[1] === privateGroup));
   await evaluate(`Services.prefs.setStringPref('kivo.taskbar.jumpListHidden', JSON.stringify({ '--kivo-workspace ${study.id}': Date.now() + 60000 })); true`);
@@ -227,6 +286,7 @@ try {
   if (group === 'Kivo.Browser') throw new Error('This is the installed Kivo: its Jump List is not written by tests');
   const written = await json('taskbarModule.KivoTaskbar.writeJumpList()');
   check('Kivo.exe writes the Jump List', written?.exitCode === 0 && !/^error/m.test(written.output));
+  check('and fits the categories in the slots Windows gives', new RegExp(`^slots\\t${group.replace(/\./g, '\\.')}\\t\\d+`, 'm').test(written?.output ?? ''));
 
   // ---------- The profile's character ----------
   const girl = 'energetic-girl';
@@ -278,6 +338,25 @@ try {
   check('Kivo\'s own shortcuts take the character\'s icon', mainWrite?.includes(mainLink) && shortcutIcon(mainLink) === `${girlFile},0`);
   check('other profiles, installs and programs are left alone', JSON.stringify([otherProfile, otherInstall, otherApp].map(shortcutIcon)) === JSON.stringify(untouched));
   check('writing the same icon again changes nothing', !/^shortcut/m.test(await writeShortcuts() ?? 'shortcut'));
+
+  // The private windows' button is drawn from their shortcut: it starts Kivo.exe with Malek in a hood (IDI_PBMODE).
+  const privateLink = join(shortcuts, 'Kivo Private Browsing.lnk');
+  const privateWanted = JSON.stringify({ target: kivoExe, args: '-private-window', icon: `${engine},-5`, appId: privateGroup });
+  check('the main button makes the private windows\' Start shortcut', mainWrite?.includes(privateLink)
+    && JSON.stringify(shortcutInfo(privateLink)) === privateWanted && await evaluate(`Services.prefs.getBoolPref('kivo.taskbar.privateShortcut', false)`));
+  rmSync(privateLink);
+  check('one the user deleted stays deleted', !/^shortcut/m.test(await writeShortcuts() ?? 'shortcut') && !existsSync(privateLink));
+  // Firefox's, to the private_browsing.exe Kivo doesn't ship (here a pinned copy), and another install's.
+  const firefoxPrivate = join(shortcuts, 'implicit', 'Kivo Private Browsing.lnk');
+  const otherPrivate = join(shortcuts, 'Other install private.lnk');
+  makeAppShortcut(firefoxPrivate, join(dirname(kivoExe), 'private_browsing.exe'), privateGroup);
+  makeAppShortcut(otherPrivate, join(shortcuts, 'private_browsing.exe'), privateGroup);
+  const otherPrivateBefore = JSON.stringify(shortcutInfo(otherPrivate));
+  const repaired = await writeShortcuts();
+  check('Firefox\'s blank private shortcut starts Kivo with the private icon', repaired?.includes(firefoxPrivate)
+    && JSON.stringify(shortcutInfo(firefoxPrivate)) === privateWanted);
+  check('another install\'s is left alone, and no new one is made', JSON.stringify(shortcutInfo(otherPrivate)) === otherPrivateBefore && !existsSync(privateLink));
+  check('and writing again changes nothing', !/^shortcut/m.test(await writeShortcuts() ?? 'shortcut'));
 
   await setCharacter('young-genius');
   await setProfile('taskbarTest.profile');

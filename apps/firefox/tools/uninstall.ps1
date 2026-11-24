@@ -9,8 +9,15 @@ if ($running) {
     exit 1
 }
 
-$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Kivo.lnk'
+$programs = [Environment]::GetFolderPath('Programs')
+$startMenu = Join-Path $programs 'Kivo.lnk'
 if (Test-Path $startMenu) { Remove-Item $startMenu -Force }
+# Every other Start shortcut to this install too, like the private windows' one (KivoTaskbar.sys.mjs).
+$shell = New-Object -ComObject WScript.Shell
+foreach ($link in Get-ChildItem $programs -Filter *.lnk) {
+    $target = $shell.CreateShortcut($link.FullName).TargetPath
+    if ($target -and $target.StartsWith($dir + '\', [StringComparison]::OrdinalIgnoreCase)) { Remove-Item $link.FullName -Force }
+}
 Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Kivo' -Recurse -Force -ErrorAction SilentlyContinue
 Remove-ItemProperty 'HKCU:\Software\Mozilla\Kivo\TaskBarIDs' -Name $dir -ErrorAction SilentlyContinue
 # تسجيل Kivo كمتصفح (install.ps1). لو كان الافتراضي، Windows بيرجع يسأل عن متصفح تاني.

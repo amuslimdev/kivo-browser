@@ -67,6 +67,10 @@ public static class KivoShortcut
 
     const ushort VT_LPWSTR = 31;
     internal static readonly Guid AppUserModel = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+    public const string PrivateArguments = "-private-window";
+
+    [DllImport("ole32.dll")]
+    static extern int PropVariantClear(ref PropVariant value);
 
     /// <summary>Writes the shortcut, replacing any file at <paramref name="lnk"/>.</summary>
     public static void Create(string lnk, string target, string workingDirectory, string description, string appUserModelId)
@@ -164,6 +168,119 @@ public static class KivoShortcut
         link.SetIconLocation(icon, 0);
         ((IPersistFile)link).Save(lnk, true);
         return true;
+    }
+
+    /// <summary>
+    /// The private windows' shortcuts of this install: the ones with their AppUserModelID whose target is next to
+    /// <paramref name="target"/> (Kivo.exe, or Firefox's private_browsing.exe that Kivo doesn't ship). Each is pointed
+    /// at "Kivo.exe -private-window" with the private icon, since Windows draws the private windows' button from it.
+    /// With <paramref name="create"/> and none at all, <paramref name="lnk"/> is made. Returns the ones that changed.
+    /// </summary>
+    public static List<string> SetPrivate(IEnumerable<KeyValuePair<string, bool>> folders, string target, string appUserModelId,
+        string lnk, string icon, int iconIndex, bool create)
+    {
+        var changed = new List<string>();
+        string directory = Path.GetDirectoryName(target);
+        bool found = false;
+        foreach (KeyValuePair<string, bool> folder in folders)
+        {
+            if (!Directory.Exists(folder.Key))
+            {
+                continue;
+            }
+            var depth = folder.Value ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            foreach (string file in Directory.GetFiles(folder.Key, "*.lnk", depth))
+            {
+                try
+                {
+                    var link = (IShellLinkW)new ShellLink();
+                    ((IPersistFile)link).Load(file, STGM_READ);
+                    if (GetString((IPropertyStore)link, AppUserModel, 5) != appUserModelId)
+                    {
+                        continue;
+                    }
+                    var text = new StringBuilder(4096);
+                    link.GetPath(text, text.Capacity, IntPtr.Zero, 0);
+                    if (!string.Equals(Path.GetDirectoryName(text.ToString()), directory, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue; // Another install's.
+                    }
+                    found = true;
+                    if (PointPrivate(link, target, icon, iconIndex))
+                    {
+                        ((IPersistFile)link).Save(file, true);
+                        SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, file, IntPtr.Zero);
+                        changed.Add(file);
+                    }
+                }
+                catch (Exception e)
+                {
+                    if (!(e is COMException || e is IOException || e is UnauthorizedAccessException || e is ArgumentException))
+                    {
+                        throw;
+                    }
+                }
+            }
+        }
+        if (create && !found)
+        {
+            var link = (IShellLinkW)new ShellLink();
+            PointPrivate(link, target, icon, iconIndex);
+            link.SetDescription(Path.GetFileNameWithoutExtension(lnk));
+            SetString((IPropertyStore)link, AppUserModel, 5, appUserModelId);
+            ((IPersistFile)link).Save(lnk, true);
+            SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, lnk, IntPtr.Zero);
+            changed.Add(lnk);
+        }
+        if (changed.Count > 0)
+        {
+            SHChangeNotify(SHCNE_ASSOCCHANGED, 0, null, IntPtr.Zero);
+        }
+        return changed;
+    }
+
+    /// <summary>Points a private windows' shortcut at Kivo.exe and the private icon; false when it already was.</summary>
+    static bool PointPrivate(IShellLinkW link, string target, string icon, int iconIndex)
+    {
+        string directory = Path.GetDirectoryName(target);
+        var text = new StringBuilder(4096);
+        link.GetPath(text, text.Capacity, IntPtr.Zero, 0);
+        bool same = string.Equals(text.ToString(), target, StringComparison.OrdinalIgnoreCase);
+        text.Clear();
+        link.GetArguments(text, text.Capacity);
+        same &= Plain(text.ToString()) == PrivateArguments;
+        text.Clear();
+        link.GetWorkingDirectory(text, text.Capacity);
+        same &= string.Equals(text.ToString(), directory, StringComparison.OrdinalIgnoreCase);
+        int index;
+        text.Clear();
+        link.GetIconLocation(text, text.Capacity, out index);
+        same &= index == iconIndex && string.Equals(text.ToString(), icon, StringComparison.OrdinalIgnoreCase);
+        if (same)
+        {
+            return false;
+        }
+        link.SetPath(target);
+        link.SetArguments(PrivateArguments);
+        link.SetWorkingDirectory(directory);
+        link.SetIconLocation(icon, iconIndex);
+        return true;
+    }
+
+    /// <summary>A string property, or null.</summary>
+    internal static string GetString(IPropertyStore store, Guid format, uint id)
+    {
+        var key = new PropertyKey { FormatId = format, PropertyId = id };
+        PropVariant value;
+        store.GetValue(ref key, out value);
+        try
+        {
+            return value.Type == VT_LPWSTR ? Marshal.PtrToStringUni(value.Value) : null;
+        }
+        finally
+        {
+            PropVariantClear(ref value);
+        }
     }
 
     /// <summary>Sets one string property and commits it.</summary>

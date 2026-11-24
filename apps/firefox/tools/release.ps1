@@ -12,7 +12,8 @@
 .PARAMETER KeyFile
     المفتاح الخاص. الافتراضي %USERPROFILE%\.kivo-release\release-key.xml. في GitHub Actions بييجي من KIVO_RELEASE_KEY.
 .PARAMETER Publish
-    يحدّث الـ repo العام ويرفع الـ release بـ gh. بيرفض لو apps/firefox فيه تعديلات مش متسجلة في git.
+    يحدّث الـ repo العام ويرفع الـ release بـ gh. بيرفض لو apps/firefox فيه تعديلات مش متسجلة في git، أو لو النسخة
+    اتبنت من غير مفتاح Safe Browsing.
 #>
 param([string] $GitHubRepo = 'amuslimdev/kivo-browser', [string] $KeyFile, [switch] $Publish)
 . "$PSScriptRoot\common.ps1"
@@ -25,6 +26,13 @@ $buildId = Get-IniValue 'BuildID'
 $zipName = "Kivo-$version-win64.zip"
 $zip = Join-Path $Out $zipName
 if (-not (Test-Path $zip)) { throw "No $zipName in $Out (run package.ps1)." }
+
+# Kivo مابيتنشرش من غير Safe Browsing: من غير مفتاح Google قوايم المواقع المزيفة والخبيثة مابتتحدثش.
+if (-not (Test-SafeBrowsingKey $app)) {
+    $message = 'This Kivo was built without a Safe Browsing key (see apps/firefox/mozconfig).'
+    if ($Publish) { throw "$message It is not published." }
+    Write-Warning $message
+}
 
 # الكود المنشور لازم يبقى هو اللي اتبنى: apps/firefox متسجل في git ومفيش تعديلات.
 $dirty = & git -C $FirefoxApp status --porcelain -- .

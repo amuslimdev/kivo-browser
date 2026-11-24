@@ -58,9 +58,12 @@ pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false
 pref("browser.preferences.moreFromMozilla", false);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled", false);
 
-// Private windows: Kivo's own night look (KivoTheme.sys.mjs) instead of Firefox's purple private theme, which
+// Private windows: Kivo's own dark gray look (KivoTheme.sys.mjs) instead of Firefox's purple private theme, which
 // painted only part of the window over Kivo's colors.
 pref("browser.theme.dark-private-windows", false);
+// Kivo makes the Start shortcut of private windows itself (KivoTaskbar.sys.mjs, through Kivo.exe). Firefox's pointed
+// at private_browsing.exe, which Kivo doesn't ship, and Windows drew the private windows' taskbar button from it, blank.
+pref("browser.privacySegmentation.createdShortcut", true);
 
 // Sync is optional per profile (a Mozilla account, from Kivo's profile menu), and Kivo's own look syncs with it.
 // Firefox's theme does not: Kivo always uses Firefox's default theme (KivoTheme.sys.mjs), and a dark Firefox
@@ -91,7 +94,23 @@ pref("dom.forms.html_color_picker.enabled", true);
 // Kivo writes the taskbar Jump Lists (kivo/KivoTaskbar.sys.mjs, through Kivo.exe): one per profile button, with its
 // workspaces. Firefox's writes only the main button's list, and its items started the engine without Kivo's identity.
 pref("browser.taskbar.lists.enabled", false);
+// Five sites, one item each, under the workspaces and the profiles (Firefox shows seven pages).
+pref("browser.taskbar.lists.maxListItemCount", 5);
 
 // Kivo updates itself from its public releases (KivoShell.sys.mjs, tools/release.ps1); Kivo.exe installs only
 // builds signed with Kivo's release key.
 pref("kivo.update.url", "https://github.com/amuslimdev/kivo-browser/releases/latest/download/update.json");
+
+// Safe Browsing with Kivo's own Google key (apps/firefox/mozconfig), checked by tools/safebrowsing-check.mjs.
+// - Google gives a non-Mozilla key the lists for deceptive sites, malware, unwanted software and harmful apps, but
+//   not the two download lists (V5 mwb-4b and csdda-32b: 404). Firefox asks for every list in one request, so with
+//   them in the list nothing updated at all (8 Nov 2026).
+// - The phishing table is goog-phish-proto, as in Mozilla's builds: the engine of an artifact build is Mozilla's
+//   official one, and it only knows that name for V5 (se-4b). These prefs are built without MOZILLA_OFFICIAL and
+//   said googpub-phish-proto, which the engine dropped from the request, so deceptive sites were never blocked.
+// - Google's remote download check answers 403 to this key, so it is off: it only sent the details of each
+//   downloaded program to Google for nothing.
+pref("urlclassifier.phishTable", "goog-phish-proto,moztest-phish-simple");
+pref("browser.safebrowsing.provider.google5.lists", "goog-phish-proto,goog-malware-proto,goog-unwanted-proto,goog-harmful-proto,goog-globalcache-proto");
+pref("browser.safebrowsing.provider.google4.lists", "goog-phish-proto,googpub-phish-proto,goog-malware-proto,goog-unwanted-proto,goog-harmful-proto");
+pref("browser.safebrowsing.downloads.remote.enabled", false);

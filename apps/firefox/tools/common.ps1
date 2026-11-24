@@ -18,6 +18,23 @@ function ConvertTo-Msys([string] $Path) {
     '/' + $Path.Substring(0, 1).ToLower() + $Path.Substring(2).Replace('\', '/')
 }
 
+# Safe Browsing: النسخة اللي في $App فيها مفتاح Google ولا لأ (المفتاح من الـ mozconfig، و Firefox بيحطه في
+# AppConstants جوه omni.ja). بيرجّع true أو false بس، والمفتاح نفسه مابيطلعش.
+function Test-SafeBrowsingKey([string] $App) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $omni = [IO.Compression.ZipFile]::OpenRead((Join-Path $App 'omni.ja'))
+    try {
+        $entry = $omni.GetEntry('modules/AppConstants.sys.mjs')
+        if (-not $entry) { throw "No modules/AppConstants.sys.mjs in $App\omni.ja" }
+        $reader = [IO.StreamReader]::new($entry.Open())
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { $omni.Dispose() }
+    $match = [regex]::Match($text, 'MOZ_GOOGLE_SAFEBROWSING_API_KEY:\s*"([^"]*)"')
+    if (-not $match.Success) { throw 'No MOZ_GOOGLE_SAFEBROWSING_API_KEY in AppConstants.sys.mjs' }
+    $key = $match.Groups[1].Value
+    [bool] ($key -and $key -ne 'no-google-safebrowsing-api-key')
+}
+
 function Invoke-Git {
     $ErrorActionPreference = 'Continue'
     & git -c core.longpaths=true -c core.autocrlf=false @args

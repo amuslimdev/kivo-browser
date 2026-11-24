@@ -1,7 +1,9 @@
-// بيبدّل كل أيقونات الـ exe (RT_GROUP_ICON) بأيقونة واحدة من ملف .ico، ويشيل الصور القديمة (RT_ICON).
+// بيبدّل كل أيقونات الـ exe (RT_GROUP_ICON) بأيقونة Kivo من ملف .ico، ويشيل الصور القديمة (RT_ICON). وأي group
+// برقمه ممكن ياخد .ico تاني: IDI_PBMODE (5) هو أيقونة النافذة الخاصة (nsWindow.cpp).
 // الـ artifact build بييجي بـ firefox.exe عليه أيقونة Firefox، وماينفعش نوزّعه بيها (trademark).
 // package.ps1 بيحمّله بـ Add-Type، فلازم يتعمله compile بـ C# 5 بتاع Windows PowerShell.
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -49,9 +51,24 @@ public static class KivoExeIcon
     /// <returns>عدد الـ groups اللي اتبدلت.</returns>
     public static int Replace(string exePath, string icoPath)
     {
-        byte[] ico = File.ReadAllBytes(icoPath);
-        if (BitConverter.ToUInt16(ico, 2) != 1) throw new InvalidDataException("not an .ico file: " + icoPath);
-        int count = BitConverter.ToUInt16(ico, 4);
+        return Replace(exePath, icoPath, null);
+    }
+
+    /// <param name="others">رقم الـ group ← مسار .ico ليه هو (من PowerShell: @{ 5 = 'pbmode.ico' }).</param>
+    /// <returns>عدد الـ groups اللي اتبدلت.</returns>
+    public static int Replace(string exePath, string icoPath, IDictionary others)
+    {
+        var files = new Dictionary<int, byte[]>();   // رقم الـ group ← الـ .ico بتاعه، و 0 للباقيين
+        files[0] = ReadIco(icoPath);
+        if (others != null)
+        {
+            foreach (DictionaryEntry entry in others)
+            {
+                int id = Convert.ToInt32(entry.Key);
+                if (id <= 0) throw new ArgumentException("not an icon group id: " + entry.Key);
+                files[id] = ReadIco(Convert.ToString(entry.Value));   // من PowerShell ممكن تيجي PSObject
+            }
+        }
 
         var groups = new List<Group>();
         var oldIcons = new HashSet<KeyValuePair<ushort, ushort>>(); // (id، lang)
@@ -108,31 +125,27 @@ public static class KivoExeIcon
             }
 
             ushort lang = groups[0].Lang;
-            var group = new MemoryStream();
-            var writer = new BinaryWriter(group);
-            writer.Write((ushort)0);
-            writer.Write((ushort)1);
-            writer.Write((ushort)count);
-            for (int i = 0; i < count; i++)
-            {
-                int entry = 6 + i * 16;
-                int bytes = BitConverter.ToInt32(ico, entry + 8);
-                int offset = BitConverter.ToInt32(ico, entry + 12);
-                ushort id = (ushort)(maxIconId + 1 + i);
-                byte[] image = new byte[bytes];
-                Buffer.BlockCopy(ico, offset, image, 0, bytes);
-                if (!UpdateResource(update, RT_ICON, (IntPtr)id, lang, image, (uint)bytes))
-                    throw new IOException("UpdateResource RT_ICON failed: " + Marshal.GetLastWin32Error());
-                writer.Write(ico, entry, 12);   // width، height، colors، reserved، planes، bit count، bytes
-                writer.Write(id);
-            }
-            writer.Flush();
-            byte[] groupData = group.ToArray();
+            int next = maxIconId + 1;
+            var data = new Dictionary<int, byte[]>();
+            foreach (var file in files)
+                data[file.Key] = AddImages(update, file.Value, lang, ref next);
 
+            var found = new HashSet<int>();
             foreach (var g in groups)
             {
+                int id = IsIntResource(g.Name) ? (int)g.Name.ToInt64() : 0;
+                byte[] groupData = data[0];
+                if (id != 0 && data.ContainsKey(id))
+                {
+                    groupData = data[id];
+                    found.Add(id);
+                }
                 if (!UpdateResource(update, RT_GROUP_ICON, g.Name, g.Lang, groupData, (uint)groupData.Length))
                     throw new IOException("UpdateResource RT_GROUP_ICON failed: " + Marshal.GetLastWin32Error());
+            }
+            foreach (int id in data.Keys)
+            {
+                if (id != 0 && !found.Contains(id)) throw new InvalidDataException("no icon group " + id + " in " + exePath);
             }
             ok = true;
         }
@@ -146,5 +159,38 @@ public static class KivoExeIcon
                 if (!IsIntResource(g.Name) && freed.Add(g.Name)) Marshal.FreeHGlobal(g.Name);
         }
         return groups.Count;
+    }
+
+    static byte[] ReadIco(string path)
+    {
+        byte[] ico = File.ReadAllBytes(path);
+        if (ico.Length < 6 || BitConverter.ToUInt16(ico, 2) != 1) throw new InvalidDataException("not an .ico file: " + path);
+        return ico;
+    }
+
+    /// <summary>بيضيف صور الـ .ico كـ RT_ICON بأرقام جديدة من <paramref name="next"/>، ويرجّع الـ RT_GROUP_ICON بتاعها.</summary>
+    static byte[] AddImages(IntPtr update, byte[] ico, ushort lang, ref int next)
+    {
+        int count = BitConverter.ToUInt16(ico, 4);
+        var group = new MemoryStream();
+        var writer = new BinaryWriter(group);
+        writer.Write((ushort)0);
+        writer.Write((ushort)1);
+        writer.Write((ushort)count);
+        for (int i = 0; i < count; i++)
+        {
+            int entry = 6 + i * 16;
+            int bytes = BitConverter.ToInt32(ico, entry + 8);
+            int offset = BitConverter.ToInt32(ico, entry + 12);
+            ushort id = (ushort)next++;
+            byte[] image = new byte[bytes];
+            Buffer.BlockCopy(ico, offset, image, 0, bytes);
+            if (!UpdateResource(update, RT_ICON, (IntPtr)id, lang, image, (uint)bytes))
+                throw new IOException("UpdateResource RT_ICON failed: " + Marshal.GetLastWin32Error());
+            writer.Write(ico, entry, 12);   // width، height، colors، reserved، planes، bit count، bytes
+            writer.Write(id);
+        }
+        writer.Flush();
+        return group.ToArray();
     }
 }

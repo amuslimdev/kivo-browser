@@ -99,8 +99,10 @@ foreach ($name in $remove) {
 if (-not ('KivoExeIcon' -as [type])) {
     Add-Type -TypeDefinition (Get-Content (Join-Path $PSScriptRoot 'ExeIcon.cs') -Raw -Encoding UTF8)
 }
-# النوافذ والـ taskbar بياخدوا أيقونة المحرك نفسه.
-$groups = [KivoExeIcon]::Replace((Join-Path $app 'kivo-browser.exe'), (Join-Path $FirefoxApp 'branding\kivo\firefox.ico'))
+# النوافذ والـ taskbar بياخدوا أيقونة المحرك نفسه. والنافذة الخاصة أيقونتها IDI_PBMODE (5، nsWindow.cpp)، وده
+# كمان أيقونة اختصارها في Start (KivoTaskbar.sys.mjs).
+$branding = Join-Path $FirefoxApp 'branding\kivo'
+$groups = [KivoExeIcon]::Replace((Join-Path $app 'kivo-browser.exe'), (Join-Path $branding 'firefox.ico'), @{ 5 = (Join-Path $branding 'pbmode.ico') })
 Write-Host "kivo-browser.exe: $groups icon groups replaced"
 
 # التعلب اللي برا omni.ja (docs/MASCOT.md): kit.gif بيظهر فوق إعدادات Windows وهو بيشاور على Kivo
@@ -150,3 +152,5 @@ if (Test-Path $archive) { Remove-Item $archive -Force }
 Compress-Archive -Path $app -DestinationPath $archive
 Write-Host "Kivo $($Lock.version): $app"
 Write-Host "zip: $archive ($([math]::Round((Get-Item $archive).Length / 1MB)) MB)"
+# من غير مفتاح (مفيش ملف المفتاح وقت البناء، شوف الـ mozconfig) Kivo شغال عادي، بس release.ps1 بيرفض ينشره.
+if (Test-SafeBrowsingKey $app) { Write-Host 'Safe Browsing: on' } else { Write-Warning 'Safe Browsing: off, no key at build time (see apps/firefox/mozconfig). release.ps1 -Publish refuses this build.' }

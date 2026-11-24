@@ -9,11 +9,14 @@
 // - A profile's character (boy or girl, in Kivo Home) is its whole icon, with no picture on it. Windows draws a pin
 //   from its shortcut, so Kivo.exe also points the shortcuts of that button at the icon: the main profile's are
 //   Kivo's own (Start, desktop, the pin). Windows keeps icons by path, so each character has its own file.
-// - The Jump List of each button: the profile's workspaces, its frequent sites, and new tab / window / private
-//   window. Firefox's builder writes only its own process's AppUserModelID, with one custom category, and its
-//   items started the engine without Kivo's identity. So Kivo.exe writes the lists (tools/JumpList.cs),
-//   Firefox's are off (browser.taskbar.lists.enabled in firefox-branding.js), and its other
-//   browser.taskbar.lists.* prefs still apply here.
+// - The Jump List of each button: the profile's workspaces, the other profiles, its frequent sites (one per site,
+//   with its own icon), and new tab / window / private window, each with a picture of what it does. Firefox's
+//   builder writes only its own process's AppUserModelID, with one custom category, and its items started the
+//   engine without Kivo's identity. So Kivo.exe writes the lists (tools/JumpList.cs), Firefox's are off
+//   (browser.taskbar.lists.enabled in firefox-branding.js), and its other browser.taskbar.lists.* prefs still
+//   apply here. Kivo draws every icon itself: Firefox's favicon cache can't turn an SVG favicon into an .ico.
+// - Private windows of every profile share one button of their own, with Malek in a hood (IDI_PBMODE in the engine).
+//   Windows draws it from its Start shortcut, which Kivo.exe keeps on "Kivo.exe -private-window" with that icon.
 import { readProfile } from "moz-src:///browser/components/kivo/KivoData.sys.mjs";
 import { inkOn } from "moz-src:///browser/components/kivo/KivoTheme.sys.mjs";
 
@@ -40,7 +43,30 @@ export const CHARACTER_MARKS = {
   "energetic-girl": "chrome://browser/content/kivo/characters/energetic-girl.png",
 };
 const SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256];
-const WORKSPACE_SIZES = [16, 20, 24, 32, 48];
+// The sizes of a Jump List icon, at 100% to 300% scaling.
+const JUMP_SIZES = [16, 20, 24, 32, 48];
+// The tasks: Firefox's new tab, window and private browsing glyphs (16px), white on a tile of their own color.
+// cy is the glyph's vertical middle. Windows keeps Jump List icons by path: a new look needs a new version.
+const TASK_ICONS_VERSION = 1;
+const TASK_GLYPHS = {
+  "new-tab": {
+    color: "#1a73e8",
+    cy: 9.25,
+    path: "M11 11V9a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v6H1a1 1 0 0 0 0 2h7v-1a1 1 0 0 1 1-1zm4.5 1H13V9.5a.5.5 0 0 0-1 0V12H9.5a.5.5 0 0 0 0 1H12v2.5a.5.5 0 0 0 1 0V13h2.5a.5.5 0 0 0 0-1z",
+  },
+  "new-window": {
+    color: "#188038",
+    cy: 7.5,
+    path: "M13 1 3 1a2 2 0 0 0-2 2l0 9a2 2 0 0 0 2 2l10 0a2 2 0 0 0 2-2l0-9a2 2 0 0 0-2-2zM2.85 2.25l10.3 0 .6.6 0 2.15-11.5 0 0-2.15.6-.6zm10.3 10.5-10.3 0-.6-.6 0-5.9 11.5 0 0 5.9-.6.6z",
+  },
+  "private-window": {
+    color: "#7542e5",
+    cy: 8.35,
+    path: "M15.931 5.479c-1.525-2.001-4.517-2.257-6.381-.545l-1.043.958-1.02 0-1.042-.958C4.581 3.223 1.589 3.478.064 5.479c-.197.78.108 3.66.28 4.113.347 1.83 1.842 3.206 3.635 3.206.895 0 1.706-.357 2.347-.929l.391-.334a1.936 1.936 0 0 1 2.511-.021l.586.486 0-.003c.617.497 1.375.801 2.203.801 1.792 0 3.288-1.376 3.635-3.206.172-.453.488-3.321.279-4.113zM6.232 8.452c-.427.482-1.088.792-1.832.792-.744 0-1.405-.31-1.832-.792a.693.693 0 0 1 0-.905c.427-.482 1.088-.792 1.832-.792.744 0 1.405.31 1.832.792a.693.693 0 0 1 0 .905zm7.2 0c-.427.482-1.088.792-1.832.792-.744 0-1.405-.31-1.832-.792a.693.693 0 0 1 0-.905c.427-.482 1.088-.792 1.832-.792.744 0 1.405.31 1.832.792a.693.693 0 0 1 0 .905z",
+  },
+};
+// A site with no icon gets its first letter on one of these, picked by its address.
+const LETTER_COLORS = ["#1a73e8", "#d93025", "#188038", "#e37400", "#9334e6", "#007b83", "#c5221f", "#5f6368"];
 // The System.AppUserModel properties of a window (propkey.h).
 const APP_MODEL = "9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3";
 const RELAUNCH_COMMAND = 2;
@@ -53,6 +79,10 @@ const JUMP_LIST_REFRESH_MS = 15 * 60 * 1000;
 // out until the workspace or site is used again.
 const HIDDEN_PREF = "kivo.taskbar.jumpListHidden";
 const HIDDEN_MAX = 200;
+// True once Kivo made the private windows' Start shortcut: one the user deleted stays deleted, like Firefox's.
+const PRIVATE_SHORTCUT_PREF = "kivo.taskbar.privateShortcut";
+// The private windows' icon in the engine (nsNativeAppSupportWin.h); tools/package.ps1 puts Kivo's there.
+const IDI_PBMODE = 5;
 
 function windows() {
   if (native) {
@@ -258,6 +288,68 @@ export function drawWorkspaceIcon(canvas, color, letter) {
   }
 }
 
+/** A rounded tile, as large as the icon. */
+function tile(c, size, color) {
+  c.beginPath();
+  c.roundRect(size * 0.04, size * 0.04, size * 0.92, size * 0.92, size * 0.24);
+  c.fillStyle = color;
+  c.fill();
+}
+
+/** A site with no icon of its own: its first letter on a tile, like Chrome. */
+export function drawLetterIcon(canvas, color, letter) {
+  const size = canvas.width;
+  const c = canvas.getContext("2d");
+  c.clearRect(0, 0, size, size);
+  tile(c, size, color);
+  c.fillStyle = inkOn(color);
+  c.font = `600 ${Math.round(size * 0.56)}px "Segoe UI", sans-serif`;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText(letter, size / 2, size * 0.54);
+}
+
+/** A task: what it opens, white on its tile. */
+export function drawTaskIcon(canvas, kind) {
+  const { color, cy, path } = TASK_GLYPHS[kind];
+  const size = canvas.width;
+  const c = canvas.getContext("2d");
+  c.clearRect(0, 0, size, size);
+  tile(c, size, color);
+  const scale = (size * 0.6) / 16;
+  c.save();
+  c.translate(size / 2 - 8 * scale, size / 2 - cy * scale);
+  c.scale(scale, scale);
+  c.fillStyle = "#ffffff";
+  c.fill(new canvas.ownerDocument.defaultView.Path2D(path));
+  c.restore();
+}
+
+/** A picture as large as fits, centered; a profile's in a circle. */
+export function drawPicture(canvas, img, circle = false) {
+  const size = canvas.width;
+  const c = canvas.getContext("2d");
+  c.clearRect(0, 0, size, size);
+  const width = img.naturalWidth || size;
+  const height = img.naturalHeight || size;
+  const scale = size / Math.max(width, height);
+  c.save();
+  if (circle) {
+    c.beginPath();
+    c.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    c.clip();
+  }
+  c.drawImage(img, (size - width * scale) / 2, (size - height * scale) / 2, width * scale, height * scale);
+  c.restore();
+}
+
+/** True when the picture draws something: an SVG with no size, or a broken image, draws nothing. */
+function paints(win, img) {
+  const test = canvas(win, 32);
+  drawPicture(test, img);
+  return test.getContext("2d").getImageData(0, 0, 32, 32).data.some((value, i) => i % 4 === 3 && value > 16);
+}
+
 /** An .ico with a PNG per size. Each is drawn 4x larger first, which keeps circles and edges clean at 16px. */
 async function ico(win, sizes, draw) {
   const payloads = [];
@@ -444,19 +536,82 @@ function isHidden(hidden, args, usedAt) {
   return (hidden[commandLine(args)] ?? -1) >= usedAt;
 }
 
-/** <profile>\kivo\jumplist\<color>-<letter>.ico. Windows keeps Jump List icons by path, so a new look is a new file. */
-async function workspaceIcon(win, ws, used) {
-  const letter = [...ws.name.trim()][0]?.toUpperCase() ?? "";
-  const path = PathUtils.join(PathUtils.profileDir, "kivo", "jumplist", `${ws.color.slice(1)}-${letter.codePointAt(0) ?? 0}.ico`);
-  used.add(path);
-  if (!(await IOUtils.exists(path))) {
-    await writeFile(path, await ico(win, WORKSPACE_SIZES, large => drawWorkspaceIcon(large, ws.color, letter)));
+/** A short, stable name for a text (two 32-bit FNV-1a hashes). */
+function hashOf(text) {
+  let a = 0x811c9dc5;
+  let b = 0x9747b28c;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    a = Math.imul(a ^ code, 16777619);
+    b = Math.imul(b ^ code, 1597334677);
   }
+  return [a, b].map(n => (n >>> 0).toString(16).padStart(8, "0")).join("");
+}
+
+/** <profile>\kivo\jumplist\<name>.ico. Windows keeps Jump List icons by path, so a new look is a new name. */
+function jumpIconPath(name) {
+  return PathUtils.join(PathUtils.profileDir, "kivo", "jumplist", `${name}.ico`);
+}
+
+/** The icon file with this name, drawn the first time. Files no list uses any more are removed (writeJumpList). */
+async function jumpIcon(win, name, used, draw) {
+  const path = jumpIconPath(name);
+  if (!(await IOUtils.exists(path))) {
+    await writeFile(path, await ico(win, JUMP_SIZES, draw));
+  }
+  used.add(path);
   return path;
 }
 
-/** Firefox's frequent sites query, with the last visit for hidden items. */
-async function frequentSites(prefix, engine, hidden, limit) {
+/** A workspace: its color dot and first letter. */
+function workspaceIcon(win, ws, used) {
+  const letter = [...ws.name.trim()][0]?.toUpperCase() ?? "";
+  return jumpIcon(win, `${ws.color.slice(1)}-${letter.codePointAt(0) ?? 0}`, used, large => drawWorkspaceIcon(large, ws.color, letter));
+}
+
+/**
+ * A site: the first icon Kivo has for one of its pages (the page itself, the site's home, its other pages), or its
+ * first letter.
+ */
+async function siteIcon(win, site, used) {
+  const tried = new Set();
+  for (const url of site.pages) {
+    let data;
+    try {
+      data = (await lazy.PlacesUtils.favicons.getFaviconForPage(Services.io.newURI(url), 32))?.dataURI?.spec;
+    } catch {
+      continue;
+    }
+    if (!data || tried.has(data)) {
+      continue;
+    }
+    tried.add(data);
+    const path = jumpIconPath(`site-${hashOf(data)}`);
+    if (await IOUtils.exists(path)) {
+      used.add(path);
+      return path;
+    }
+    try {
+      const img = await image(win, data);
+      if (paints(win, img)) {
+        await writeFile(path, await ico(win, JUMP_SIZES, large => drawPicture(large, img)));
+        used.add(path);
+        return path;
+      }
+    } catch {
+      // An icon Gecko can't draw: the next one.
+    }
+  }
+  const letter = (site.title.match(/[\p{L}\p{N}]/u) ?? site.host.match(/[\p{L}\p{N}]/u) ?? ["?"])[0].toUpperCase();
+  const color = LETTER_COLORS[parseInt(hashOf(site.host).slice(0, 8), 16) % LETTER_COLORS.length];
+  return jumpIcon(win, `letter-${color.slice(1)}-${letter.codePointAt(0)}`, used, large => drawLetterIcon(large, color, letter));
+}
+
+/**
+ * The most visited sites, one item each: the site's most visited page, under its title. Two sites with the same
+ * title show their address too. Firefox's frequent query, with the last visit for hidden items.
+ */
+async function frequentSites(win, prefix, engine, hidden, limit, used) {
   const conn = await lazy.PlacesUtils.promiseDBConnection();
   const rows = await conn.executeCached(
     "SELECT p.url, IFNULL(p.title, p.url) AS title, IFNULL(p.last_visit_date, 0) AS visited " +
@@ -464,43 +619,157 @@ async function frequentSites(prefix, engine, hidden, limit) {
       "AND EXISTS (SELECT id FROM moz_historyvisits WHERE place_id = p.id AND visit_type NOT IN (" +
       `0, ${Ci.nsINavHistoryService.TRANSITION_EMBED}, ${Ci.nsINavHistoryService.TRANSITION_FRAMED_LINK}) LIMIT 1) ` +
       "ORDER BY p.visit_count DESC LIMIT :limit",
-    { limit: limit * 3 }
+    { limit: 200 }
   );
-  jumpList.favicons ??= taskbar().createJumpListBuilder(false);
-  const sites = [];
+  // Each site by its host, the first (most visited) page first; null for a site the user removed from the list.
+  const byHost = new Map();
   for (const row of rows) {
     const url = row.getResultByName("url");
-    const args = [...prefix, "-url", url];
     // Sites only: anything else on a command line could be read as a flag.
-    if (!/^https?:\/\/[^\s"]+$/i.test(url) || isHidden(hidden, args, row.getResultByName("visited") / 1000)) {
+    if (!/^https?:\/\/[^\s"]+$/i.test(url)) {
+      continue;
+    }
+    let address;
+    try {
+      address = new URL(url);
+    } catch {
+      continue;
+    }
+    const host = address.host.replace(/^www\./i, "");
+    if (byHost.has(host)) {
+      const site = byHost.get(host);
+      if (site && site.pages.length < 6) {
+        site.pages.push(url);
+      }
+      continue;
+    }
+    const args = [...prefix, "-url", url];
+    if (isHidden(hidden, args, row.getResultByName("visited") / 1000)) {
+      byHost.set(host, null);
+      continue;
+    }
+    const title = field(row.getResultByName("title")) || host;
+    byHost.set(host, { host, title, url, args, pages: [url, `${address.origin}/`] });
+  }
+  const sites = [...byHost.values()].filter(Boolean).slice(0, limit);
+  const titles = sites.map(site => site.title.toLowerCase());
+  const items = [];
+  for (const site of sites) {
+    const twin = titles.indexOf(site.title.toLowerCase()) !== titles.lastIndexOf(site.title.toLowerCase());
+    const icon = win ? await siteIcon(win, site, used) : "";
+    items.push(item(twin ? `${site.title} (${site.host})` : site.title, site.args, icon || engine, icon ? 0 : 1, site.url));
+  }
+  return items;
+}
+
+/** <path>\kivo\profile.json's character, or null. */
+async function characterOfProfile(path) {
+  try {
+    const { character } = await IOUtils.readJSON(PathUtils.join(path, "kivo", "profile.json"));
+    return Object.hasOwn(CHARACTER_MARKS, character) ? character : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Another profile: its character, or its picture as in the profile menu. */
+async function profileIcon(win, profile, used) {
+  const character = await characterOfProfile(profile.path);
+  const fill = profile.theme?.themeBg || "#e0e0e6";
+  const stroke = profile.theme?.themeFg || "#15141a";
+  const key = character ?? (profile.hasCustomAvatar ? profile.avatar : `${profile.avatar}:${fill}:${stroke}`);
+  const path = jumpIconPath(`profile-${hashOf(key)}`);
+  if (!(await IOUtils.exists(path))) {
+    let url;
+    if (character) {
+      url = CHARACTER_MARKS[character];
+    } else if (profile.hasCustomAvatar) {
+      url = PathUtils.toFileURI(profile.getAvatarPath());
+    } else {
+      // Firefox's pictures take their colors from the page (context-fill), which a canvas doesn't have.
+      const svg = await (await win.fetch(profile.getAvatarPath(48))).text();
+      url = `data:image/svg+xml,${encodeURIComponent(svg.replaceAll("context-fill", fill).replaceAll("context-stroke", stroke))}`;
+    }
+    const img = await image(win, url);
+    await writeFile(path, await ico(win, JUMP_SIZES, large => drawPicture(large, img, !character)));
+  }
+  used.add(path);
+  return path;
+}
+
+/** The other profiles of this one's group, each opening in its own window. */
+async function profileItems(win, current, hidden, used) {
+  const items = [];
+  for (const profile of await KivoTaskbar.otherProfiles(current)) {
+    const args = ["-profile", profile.path];
+    if (isHidden(hidden, args, 0)) {
       continue;
     }
     let icon = "";
-    try {
-      icon = await jumpList.favicons.obtainAndCacheFaviconAsync(Services.io.newURI(url));
-    } catch {
-      // Not cached yet, or the site has none: the engine's page icon, like Firefox.
+    if (win) {
+      icon = await profileIcon(win, profile, used).catch(error => {
+        console.warn("Kivo Jump List: no picture for a profile", error);
+        return "";
+      });
     }
-    sites.push(item(row.getResultByName("title"), args, icon || engine, icon ? 0 : 1, url));
-    if (sites.length >= limit) {
-      break;
-    }
+    items.push(item(profile.name, args, icon, 0, `Open ${profile.name}`));
   }
-  return sites;
+  return items;
 }
 
-function tasks(prefix, engine) {
+function tasks(prefix, engine, icons) {
   const bundle = Services.strings.createBundle("chrome://browser/locale/taskbar.properties");
   const text = name => bundle.GetStringFromName(`taskbar.tasks.${name}`);
-  // Firefox's tasks, with the icons it puts in the engine (tools/ExeIcon.cs makes them Kivo's).
+  // Kivo's pictures, or the icons Firefox puts in the engine (tools/ExeIcon.cs makes them all Kivo's).
+  const icon = (kind, index) => (icons ? [icons[kind], 0] : [engine, index]);
   const list = [
-    item(text("newTab.label"), [...prefix, "-new-tab", "about:blank"], engine, 3, text("newTab.description")),
-    item(text("newWindow.label"), [...prefix, "-browser"], engine, 2, text("newWindow.description")),
+    item(text("newTab.label"), [...prefix, "-new-tab", "about:blank"], ...icon("new-tab", 3), text("newTab.description")),
+    item(text("newWindow.label"), [...prefix, "-browser"], ...icon("new-window", 2), text("newWindow.description")),
   ];
   if (lazy.PrivateBrowsingUtils.enabled) {
-    list.push(item(text("newPrivateWindow.label"), [...prefix, "-private-window"], engine, 4, text("newPrivateWindow.description")));
+    list.push(item(text("newPrivateWindow.label"), [...prefix, "-private-window"], ...icon("private-window", 4), text("newPrivateWindow.description")));
   }
   return list;
+}
+
+/** The tasks' icons, or null with no window to draw them. */
+async function taskIcons(win, used) {
+  if (!win) {
+    return null;
+  }
+  const icons = {};
+  for (const kind of Object.keys(TASK_GLYPHS)) {
+    icons[kind] = await jumpIcon(win, `task-${kind}-${TASK_ICONS_VERSION}`, used, large => drawTaskIcon(large, kind));
+  }
+  return icons;
+}
+
+/** True when private windows get a taskbar button of their own (nsWindow.cpp), for any profile. */
+function privateButton() {
+  return (
+    lazy.PrivateBrowsingUtils.enabled &&
+    Services.prefs.getBoolPref("browser.privateWindowSeparation.enabled", true) &&
+    !Services.prefs.getBoolPref("browser.privatebrowsing.autostart", false)
+  );
+}
+
+/**
+ * The private windows' shortcut, for Kivo.exe. Windows draws their button from the shortcut with their
+ * AppUserModelID, and Firefox's pointed at private_browsing.exe, which Kivo doesn't ship: the button was blank.
+ * Kivo.exe points this install's at "Kivo.exe -private-window" with the private icon, and makes one in Start the
+ * first time (Firefox's own is off, firefox-branding.js).
+ */
+async function privateShortcutLine(folders) {
+  if (!privateButton() || !folders.length) {
+    return [];
+  }
+  const [name] = await new Localization(["branding/brand.ftl", "browser/browser.ftl"]).formatValues([
+    "private-browsing-shortcut-text-2",
+  ]);
+  const file = PathUtils.join(folders[0].path, `${(name || "Kivo Private Browsing").replace(/[\\/:*?"<>|]/g, "")}.lnk`);
+  const engine = Services.dirsvc.get("XREExeF", Ci.nsIFile).path;
+  const create = Services.prefs.getBoolPref(PRIVATE_SHORTCUT_PREF, false) ? "" : "create";
+  return [`private\t${taskbar().defaultPrivateGroupId}\t${field(file)}\t${field(engine)}\t${-IDI_PBMODE}\t${create}`];
 }
 
 /** The shortcuts of this button, for Kivo.exe: the ones that start it (see JumpList.cs) get its icon. */
@@ -509,11 +778,17 @@ async function shortcutLines(win, profile, identity) {
     return [];
   }
   const icon = await buttonIcon(win, profile, identity, await characterOf());
-  const folders = KivoTaskbar.shortcutFolders().map(({ path, all }) => `folder\t${field(path)}\t${all ? "all" : ""}`);
-  return [`shortcut\t${field(identity?.args)}\t${field(icon)}`, ...folders];
+  const folders = KivoTaskbar.shortcutFolders();
+  // Private windows of every profile share one button: the main one looks after it.
+  const lines = identity ? [] : await privateShortcutLine(folders);
+  return [
+    `shortcut\t${field(identity?.args)}\t${field(icon)}`,
+    ...lines,
+    ...folders.map(({ path, all }) => `folder\t${field(path)}\t${all ? "all" : ""}`),
+  ];
 }
 
-/** The lines for Kivo.exe --kivo-jumplist (tools/JumpList.cs), and the workspace icons they use. */
+/** The lines for Kivo.exe --kivo-jumplist (tools/JumpList.cs), and the icon files they use. */
 async function jumpListText() {
   const profile = KivoTaskbar.currentProfile();
   const identity = await identityOf(profile);
@@ -539,8 +814,14 @@ async function jumpListText() {
     lines.push("category\tWorkspaces", ...shown);
   }
 
+  const others = await profileItems(win, profile, hidden, icons);
+  if (others.length) {
+    lines.push("category\tProfiles", ...others);
+  }
+
+  // Last of the categories: when the list is full, Kivo.exe shortens this one (see JumpList.cs).
   if (prefs.getBoolPref("frequent.enabled", true)) {
-    const sites = await frequentSites(prefix, engine, hidden, prefs.getIntPref("maxListItemCount", 7));
+    const sites = await frequentSites(win, prefix, engine, hidden, prefs.getIntPref("maxListItemCount", 5), icons);
     if (sites.length) {
       const title = Services.strings
         .createBundle("chrome://browser/locale/taskbar.properties")
@@ -549,14 +830,15 @@ async function jumpListText() {
     }
   }
   const showTasks = prefs.getBoolPref("tasks.enabled", true);
+  const pictures = showTasks ? await taskIcons(win, icons) : null;
   if (showTasks) {
-    lines.push("tasks", ...tasks(prefix, engine));
+    lines.push("tasks", ...tasks(prefix, engine, pictures));
   }
-  // Private windows have a button of their own (browser.privateWindowSeparation.enabled), with Firefox's tasks.
+  // Private windows have a button of their own (browser.privateWindowSeparation.enabled), with the same tasks.
   if (!identity) {
     lines.push(`app\t${taskbar().defaultPrivateGroupId}`);
     if (showTasks) {
-      lines.push("tasks", ...tasks(prefix, engine));
+      lines.push("tasks", ...tasks(prefix, engine, pictures));
     }
   }
   lines.push(...(await shortcutLines(win, profile, identity)));
@@ -617,6 +899,9 @@ async function writeJumpList() {
       Services.prefs.setStringPref(HIDDEN_PREF, JSON.stringify(Object.fromEntries(newest)));
     }
     jumpList.written = exitCode === 0 && !removed ? text : null;
+    if (exitCode === 0 && /^private\t.*\tcreate$/m.test(text)) {
+      Services.prefs.setBoolPref(PRIVATE_SHORTCUT_PREF, true);
+    }
     if (exitCode !== 0) {
       console.error(`Kivo Jump List: Kivo.exe exited with ${exitCode}`);
     }
@@ -637,7 +922,7 @@ export const KivoTaskbar = {
     if (Services.appinfo.OS !== "WINNT") {
       return;
     }
-    jumpList = { written: null, quitting: false, favicons: null };
+    jumpList = { written: null, quitting: false };
     // Test runs (headless) leave the Jump List alone: it belongs to the Kivo install they were started from.
     if (Services.env.get("MOZ_HEADLESS") === "1") {
       return;
@@ -685,6 +970,15 @@ export const KivoTaskbar = {
     return lazy.SelectableProfileService.currentProfile ?? null;
   },
 
+  /** The other profiles of this profile's group, oldest first. Tests replace it. */
+  async otherProfiles(current) {
+    const profiles = lazy.SelectableProfileService;
+    if (!current || !profiles.isEnabled || !profiles.initialized) {
+      return [];
+    }
+    return (await profiles.getAllProfiles()).filter(other => other.id !== current.id).sort((a, b) => a.id - b.id);
+  },
+
   /** Where Kivo's shortcuts can be: Start, the desktop, and the pins with the ones Windows makes for a pinned button. */
   shortcutFolders() {
     const folder = key => Services.dirsvc.get(key, Ci.nsIFile).path;
@@ -702,6 +996,8 @@ export const KivoTaskbar = {
 
   /** For tests: write the Jump List now; { exitCode, output } of Kivo.exe. */
   writeJumpList() {
+    // A copy of this module loaded by a test (taskbar-check.mjs --module) was never started.
+    jumpList ??= { written: null, quitting: false };
     jumpList.written = null;
     return writeJumpList();
   },
@@ -710,7 +1006,8 @@ export const KivoTaskbar = {
     if (Services.appinfo.OS !== "WINNT") {
       return Promise.resolve();
     }
-    // Private windows have their own button and icon (browser.privateWindowSeparation.enabled).
+    // Private windows have their own button and icon (browser.privateWindowSeparation.enabled): IDI_PBMODE, Malek in
+    // a hood, and their Start shortcut has it too (privateShortcutLine).
     if (win.document?.documentElement?.getAttribute("privatebrowsingmode") === "temporary") {
       return Promise.resolve();
     }

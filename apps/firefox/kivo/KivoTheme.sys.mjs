@@ -160,14 +160,21 @@ export function headerColors(theme, color) {
 }
 
 /**
+ * النافذة الخاصة: رمادي غامق ثابت زي Incognito في Chrome، مش أسود ومش بلون الـ profile (لون زي الكورال كان بيطلع
+ * نبيتي، 18 نوفمبر 2026)، والـ accent بنفسجي الـ hood بتاع أيقونتها. صفحتها بنفس الألوان (kivo/private).
+ */
+export const PRIVATE_COLORS = Object.freeze({ tabs: "#202124", toolbar: "#35363a", accent: "#7c3aed" });
+
+/**
  * ألوان الهيدر للنافذة دي. الأول لون الـ workspace (KivoWorkspaces، عشان الولد يعرف هو في أنهي واحدة)، وبعدين
  * الهيدر الثابت من الثيم، وإلا من لون الـ profile والوضع، فبيتغير مع العالم.
- * النافذة الخاصة دايمًا بالليل، بلون الـ profile (ثيم Firefox البنفسجي ليها مقفول، firefox-branding.js)، عشان تبان
- * مختلفة عن العادية. صفحتها بنفس الشكل (kivo/private).
+ * النافذة الخاصة دايمًا بألوانها هي (PRIVATE_COLORS، وثيم Firefox البنفسجي ليها مقفول، firefox-branding.js)، عشان
+ * تبان مختلفة عن العادية.
  */
 function windowColors(window, theme, workspace) {
   if (lazy.PrivateBrowsingUtils.isWindowPrivate(window)) {
-    return chromeColors(theme, true);
+    const { tabs, toolbar } = PRIVATE_COLORS;
+    return { tabs, toolbar, tabsInk: inkOn(tabs), toolbarInk: inkOn(toolbar), onAccent: inkOn(theme.accent), dark: true };
   }
   const fixed = workspace ?? theme.header;
   if (fixed) {
@@ -186,9 +193,11 @@ function workspaceColor(window) {
 function apply(window) {
   const stored = readTheme();
   // نافذة الـ workspace لونها هو لون الـ workspace في كل حاجة (الأزرار، والقوايم، وصفحات Kivo عن طريق KivoData)،
-  // مش الهيدر بس. والنافذة الخاصة مالهاش workspace.
-  const workspace = lazy.PrivateBrowsingUtils.isWindowPrivate(window) ? null : workspaceColor(window);
-  const theme = workspace ? { ...stored, accent: workspace } : stored;
+  // مش الهيدر بس. والنافذة الخاصة مالهاش workspace، ولونها بنفسجي أيقونتها.
+  const isPrivate = lazy.PrivateBrowsingUtils.isWindowPrivate(window);
+  const workspace = isPrivate ? null : workspaceColor(window);
+  const accent = isPrivate ? PRIVATE_COLORS.accent : workspace;
+  const theme = accent ? { ...stored, accent } : stored;
   const colors = windowColors(window, theme, workspace);
   const root = window.document.documentElement;
   root.setAttribute("kivo-theme", "");

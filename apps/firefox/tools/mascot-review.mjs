@@ -68,7 +68,7 @@ try {
   // نافذة خاصة كاملة.
   await kivo.evaluate(`window.kivoPrivate = OpenBrowserWindow({ private: true }); "ok"`);
   await sleep(5000);
-  await save('private-window', 'A private window: Kivo night look, no child, the mask', await shoot(`
+  await save('private-window', 'A private window: dark gray like Incognito, Malek in his violet hood', await shoot(`
     const win = window.kivoPrivate;
     win.resizeTo(1280, 860);
     await new Promise(r => setTimeout(r, 1500));
